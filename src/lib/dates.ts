@@ -33,3 +33,9 @@ export function utcToEcuador(utcIso: string): Date {
 }
 
 export { isSameMonth, isSameDay, format, es, startOfWeek, endOfWeek };
+
+// "Ahora" pero forzado a la hora de Ecuador, sin importar la zona horaria
+// real del dispositivo (relevante si alguno de los dos viaja).
+export function ahoraEcuador(): Date {
+  return toZonedTime(new Date(), APP_TIMEZONE);
+}

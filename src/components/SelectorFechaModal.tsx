@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { addMonths, subMonths, startOfMonth, isSameWeek } from 'date-fns';
-import { getMonthGrid, isSameMonth, isSameDay, format, es } from '@/lib/dates';
+import { getMonthGrid, isSameMonth, isSameDay, format, es, ahoraEcuador } from '@/lib/dates';
 
 type Vista = 'mes' | 'semana' | 'dia';
 
@@ -31,7 +31,7 @@ export default function SelectorFechaModal({
   const [mesVisible, setMesVisible] = useState<Date>(() => startOfMonth(fechaSeleccionada));
 
   const dias = getMonthGrid(mesVisible);
-  const hoy = new Date();
+  const hoy = ahoraEcuador();
 
   function irMesAnterior() {
     setMesVisible((m) => subMonths(m, 1));

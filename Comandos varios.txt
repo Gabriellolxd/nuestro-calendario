@@ -1,0 +1,7 @@
+--- Correr el Programa ---
+npm run dev 
+
+--- Subir a GIT ---
+git add .
+git commit -m "Feat: ---"
+git push

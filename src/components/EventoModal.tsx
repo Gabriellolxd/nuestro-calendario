@@ -12,6 +12,7 @@ import { getDeviceId } from '@/lib/device';
 import { PALETA_COLORES } from '@/lib/colors';
 import { format } from 'date-fns';
 import type { EventoBase, Ocurrencia, TipoRecurrencia } from '@/lib/recurrence';
+import { subirCambiosPendientes } from '@/lib/sync';
 
 type ModoEdicion = {
   ocurrencia: Ocurrencia;
@@ -126,6 +127,7 @@ export default function EventoModal({
 
       onGuardado();
       onClose();
+      subirCambiosPendientes(userId).catch((err) => console.error('Error sincronizando:', err));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar el evento.');
     } finally {
@@ -163,6 +165,7 @@ export default function EventoModal({
 
       onGuardado();
       onClose();
+      subirCambiosPendientes(userId).catch((err) => console.error('Error sincronizando:', err));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al eliminar el evento.');
     } finally {

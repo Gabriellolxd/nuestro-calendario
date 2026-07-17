@@ -1,7 +1,7 @@
 // src/components/VistaSemana.tsx
 'use client';
 
-import { format, es, isSameDay } from '@/lib/dates';
+import { format, es, isSameDay, ahoraEcuador } from '@/lib/dates';
 import type { Ocurrencia } from '@/lib/recurrence';
 import TimelineColumna, { ALTURA_HORA } from './TimelineColumna';
 
@@ -24,7 +24,7 @@ export default function VistaSemana({
   onDetalle,
   onCrearHora,
 }: Props) {
-  const hoy = new Date();
+  const hoy = ahoraEcuador();
 
   return (
     <div className="flex bg-white">

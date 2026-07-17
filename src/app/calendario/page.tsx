@@ -14,6 +14,7 @@ import {
   es,
   startOfWeek,
   endOfWeek,
+  ahoraEcuador,
 } from '@/lib/dates';
 import EventoModal from '@/components/EventoModal';
 import DetalleDiaModal from '@/components/DetalleDiaModal';
@@ -24,6 +25,8 @@ import { addMonths, subMonths, addDays, addWeeks, subWeeks, startOfDay, endOfDay
 import { proyectarEventos, type EventoBase, type Excepcion, type Ocurrencia } from '@/lib/recurrence';
 import { obtenerEventosLocal, obtenerExcepcionesLocal, descargarDesdeNube } from '@/lib/localData';
 import { ensureDeviceRegistered } from '@/lib/device';
+import { subirCambiosPendientes } from '@/lib/sync';
+import ConflictosBadge from '@/components/ConflictosBadge';
 
 const MAX_CHIPS_MES = 4;
 
@@ -40,7 +43,7 @@ export default function CalendarioPage() {
   // que se resalta en las vistas de mes y semana. Por eso navegarAFecha
   // ya NO la redondea a startOfMonth/startOfWeek: eso era lo que perdía
   // el día exacto elegido.
-  const [fechaAncla, setFechaAncla] = useState(new Date());
+const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
   const [eventosBase, setEventosBase] = useState<EventoBase[]>([]);
   const [ocurrencias, setOcurrencias] = useState<Ocurrencia[]>([]);
   const [diaSeleccionado, setDiaSeleccionado] = useState<Date | null>(null);
@@ -104,18 +107,33 @@ export default function CalendarioPage() {
     cargarEventos();
   }, [cargarEventos]);
 
-  // Descarga inicial desde Supabase hacia Dexie. Se intenta siempre;
-  // si no hay red, descargarDesdeNube falla y el catch lo absorbe —
-  // la app sigue funcionando con lo que ya haya en Dexie. No usamos
-  // navigator.onLine como gate porque es poco confiable en localhost.
-  useEffect(() => {
+  // Motor de sincronización: sube lo pendiente (synced: 0) y luego
+  // descarga los cambios de la nube. El pull ya protege (Fase 6) las
+  // filas con synced: 0 que hayan quedado en conflicto sin resolver.
+  const sincronizar = useCallback(async () => {
     if (!userId) return;
-
-    descargarDesdeNube(userId)
-      .then(() => cargarEventos())
-      .catch((err) => console.error('Error en descarga inicial:', err));
+    try {
+      await subirCambiosPendientes(userId);
+    } catch (err) {
+      console.error('Error subiendo cambios pendientes:', err);
+    }
+    try {
+      await descargarDesdeNube(userId);
+    } catch (err) {
+      console.error('Error en descarga desde la nube:', err);
+    }
+    cargarEventos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  useEffect(() => {
+    sincronizar();
+  }, [sincronizar]);
+
+  useEffect(() => {
+    window.addEventListener('online', sincronizar);
+    return () => window.removeEventListener('online', sincronizar);
+  }, [sincronizar]);
 
   // Navega al día exacto elegido en el selector de fecha (o al presionar
   // "Ir a hoy"). getMonthGrid/getWeekGrid solo necesitan una fecha DENTRO
@@ -127,9 +145,16 @@ export default function CalendarioPage() {
   }
 
   function abrirModalParaCrear(dia: Date) {
+    // Hora actual (Ecuador) en punto (redondeado, sin minutos)
+    const horaActual = ahoraEcuador().getHours();
+    const horaFinNum = Math.min(horaActual + 1, 23);
+
     setDiaSeleccionado(dia);
     setOcurrenciaEditando(null);
-    setHoraDefault(null);
+    setHoraDefault({
+      inicio: `${pad(horaActual)}:00`,
+      fin: horaActual === 23 ? '23:59' : `${pad(horaFinNum)}:00`,
+    });
     setMostrarModal(true);
   }
 
@@ -215,7 +240,8 @@ export default function CalendarioPage() {
           </div>
 
           {/* 3. Menú de perfil a la derecha */}
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
+            <ConflictosBadge onResuelto={cargarEventos} />
             <PerfilMenu />
           </div>
         </div>
@@ -279,7 +305,7 @@ export default function CalendarioPage() {
       )}
 
       <button
-        onClick={() => abrirModalParaCrear(vista === 'mes' ? new Date() : fechaAncla)}
+        onClick={() => abrirModalParaCrear(vista === 'mes' ? ahoraEcuador() : fechaAncla)}
         className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-pink-500 text-2xl text-white shadow-lg hover:bg-pink-600"
         aria-label="Nuevo evento"
       >
@@ -363,7 +389,7 @@ function VistaMes({
           const ocultos = hayOverflow ? ocDia.slice(MAX_CHIPS_MES - 1) : [];
 
           const dentroDelMes = isSameMonth(dia, mesActual);
-          const esHoy = isSameDay(dia, new Date());
+          const esHoy = isSameDay(dia, ahoraEcuador());
           const esSeleccionado = isSameDay(dia, diaResaltado);
 
           return (

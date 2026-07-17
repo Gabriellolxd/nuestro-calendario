@@ -18,6 +18,7 @@ export interface EventoLocal {
   deleted_at: string | null;
   created_at: string;
   synced: number; // 0 = pendiente de subir a Supabase, 1 = ya confirmado (usado en Fase 7)
+  origen_offline: number; // 1 si el cambio se guardó localmente estando desconectado
 }
 
 export interface ExcepcionLocal {
@@ -34,6 +35,7 @@ export interface ExcepcionLocal {
   client_updated_at: string;
   deleted_at: string | null;
   synced: number;
+  origen_offline: number; // 1 si el cambio se guardó localmente estando desconectado
 }
 
 export interface MetaLocal {
