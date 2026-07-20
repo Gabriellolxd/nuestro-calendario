@@ -6,7 +6,7 @@ git add .
 git commit -m "Feat: ---"
 git push
 
--- Para actualizar APK --
+-- Para actualizar APK y Android Studio --
 npm run build:capacitor
 npx cap sync android
 
