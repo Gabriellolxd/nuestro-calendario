@@ -23,6 +23,13 @@ const RECURRENCIA_LABELS: Record<string, string> = {
   yearly: 'Cada año',
 };
 
+const CAMPOS_CICLO: Array<[string, string]> = [
+  ['period_start', 'Inicio del periodo'],
+  ['period_end', 'Fin del periodo'],
+  ['luteal_length_manual', 'Duración fase lútea'],
+  ['notes', 'Notas'],
+];
+
 type Fila = {
   icono: string;
   etiqueta: string;
@@ -38,7 +45,27 @@ function horaLegible(iso: string | null): string {
   return format(utcToEcuador(iso), 'HH:mm');
 }
 
-function construirFilas(tipo: 'event' | 'event_exception', local: any, servidor: any): Fila[] {
+function construirFilas(tipo: 'event' | 'event_exception' | 'cycle_log', local: any, servidor: any): Fila[] {
+  if (tipo === 'cycle_log') {
+    const filasBase = CAMPOS_CICLO.map(([campo, etiqueta]) => ({
+      icono: campo === 'notes' ? '🗒️' : '🩸',
+      etiqueta,
+      local: local[campo] != null && local[campo] !== '' ? String(local[campo]) : '—',
+      servidor: servidor[campo] != null && servidor[campo] !== '' ? String(servidor[campo]) : '—',
+      diferente: local[campo] !== servidor[campo],
+    }));
+    const sintomasLocal = (local.symptoms ?? []).join(', ') || '—';
+    const sintomasServidor = (servidor.symptoms ?? []).join(', ') || '—';
+    filasBase.push({
+      icono: '🩺',
+      etiqueta: 'Síntomas',
+      local: sintomasLocal,
+      servidor: sintomasServidor,
+      diferente: sintomasLocal !== sintomasServidor,
+    });
+    return filasBase.filter((f) => f.diferente);
+  }
+  
   if (tipo === 'event') {
     const horarioLocal = `${horaLegible(local.hora_inicio)} – ${horaLegible(local.hora_fin)}`;
     const horarioServidor = `${horaLegible(servidor.hora_inicio)} – ${horaLegible(servidor.hora_fin)}`;
@@ -64,6 +91,10 @@ function construirFilas(tipo: 'event' | 'event_exception', local: any, servidor:
 }
 
 function tituloEvento(c: ConflictoConDetalles): string {
+  if (c.entity_type === 'cycle_log') {
+    const fecha = c.datos_locales.period_start ?? c.datos_servidor.period_start;
+    return `Ciclo — periodo del ${fecha}`;
+  }
   return (
     c.datos_locales.titulo ??
     c.datos_locales.nuevo_titulo ??
@@ -190,6 +221,11 @@ export default function ConflictosModal({ onClose, onResuelto }: Props) {
             return (
               <div key={c.id} className="rounded-2xl bg-gray-50 p-3">
                 <p className="mb-2 px-1 text-sm font-semibold text-gray-700">📅 {tituloEvento(c)}</p>
+                {filas.length === 0 && (
+                  <p className="mb-2 rounded-lg bg-gray-100 px-2 py-1.5 text-[11px] text-gray-500">
+                    No se detectaron diferencias visibles — cualquiera de las dos versiones es equivalente.
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <TarjetaVersion
                     etiquetaDispositivo={c.device_local?.label ?? 'Este dispositivo'}

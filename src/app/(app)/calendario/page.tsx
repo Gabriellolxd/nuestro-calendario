@@ -1,10 +1,10 @@
-// src/app/calendario/page.tsx
+// src/app/(app)/calendario/page.tsx
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import PerfilMenu from '@/components/PerfilMenu';
-import { supabase } from '@/lib/supabase';
+import SelectorCalendario from '@/components/SelectorCalendario';
+import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
 import {
   getMonthGrid,
   getWeekGrid,
@@ -23,10 +23,18 @@ import VistaSemana from '@/components/VistaSemana';
 import SelectorFechaModal from '@/components/SelectorFechaModal';
 import { addMonths, subMonths, addDays, addWeeks, subWeeks, startOfDay, endOfDay } from 'date-fns';
 import { proyectarEventos, type EventoBase, type Excepcion, type Ocurrencia } from '@/lib/recurrence';
-import { obtenerEventosLocal, obtenerExcepcionesLocal, descargarDesdeNube } from '@/lib/localData';
-import { ensureDeviceRegistered } from '@/lib/device';
+import {
+  obtenerEventosLocal,
+  obtenerExcepcionesLocal,
+  descargarDesdeNube,
+  obtenerCycleLogsLocal,
+  obtenerPrediccionCacheLocal,
+} from '@/lib/localData';
 import { subirCambiosPendientes } from '@/lib/sync';
 import ConflictosBadge from '@/components/ConflictosBadge';
+import { calcularFaseDia, ICONOS_FASE, NOMBRES_FASE, type FaseDia } from '@/lib/cyclePrediction';
+import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
+import { solicitarPermisoNotificaciones, reprogramarTodasLasNotificaciones } from '@/lib/notifications';
 
 const MAX_CHIPS_MES = 4;
 
@@ -37,13 +45,13 @@ function pad(n: number): string {
 }
 
 export default function CalendarioPage() {
+  const { userId, calendarioActivo, cargando: cargandoContexto } = useCalendarioActivo();
+  const ownerId = calendarioActivo?.ownerId ?? null;
+  const esEspectador = calendarioActivo?.rol === 'espectador';
+
   const [vista, setVista] = useState<Vista>('mes');
-  // fechaAncla cumple doble función: (1) ancla para calcular qué mes/semana
-  // mostrar en la grilla, y (2) el día exacto seleccionado por el usuario,
-  // que se resalta en las vistas de mes y semana. Por eso navegarAFecha
-  // ya NO la redondea a startOfMonth/startOfWeek: eso era lo que perdía
-  // el día exacto elegido.
-const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
+  const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
+  const [diaSeleccionadoUsuario, setDiaSeleccionadoUsuario] = useState<Date | null>(null);
   const [eventosBase, setEventosBase] = useState<EventoBase[]>([]);
   const [ocurrencias, setOcurrencias] = useState<Ocurrencia[]>([]);
   const [diaSeleccionado, setDiaSeleccionado] = useState<Date | null>(null);
@@ -51,28 +59,9 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
   const [horaDefault, setHoraDefault] = useState<{ inicio: string; fin: string } | null>(null);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [detalleDia, setDetalleDia] = useState<{ fecha: Date; ocurrencias: Ocurrencia[] } | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const router = useRouter();
-
-  // Selector de fecha personalizado (reemplaza el <input type="date"> nativo)
+  const [cycleLogs, setCycleLogs] = useState<CycleLogLocal[]>([]);
+  const [prediccionCiclo, setPrediccionCiclo] = useState<CyclePredictionCacheLocal | undefined>(undefined);
   const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) {
-        router.push('/login');
-        return;
-      }
-      try {
-        // Registra el dispositivo aunque la sesión ya venga restaurada
-        // (no solo cuando el login se hace manualmente en /login).
-        await ensureDeviceRegistered(data.session.user.id);
-      } catch (err) {
-        console.error('Error registrando dispositivo:', err);
-      }
-      setUserId(data.session.user.id);
-    });
-  }, [router]);
 
   const diasMes = getMonthGrid(fechaAncla);
   const diasSemana = getWeekGrid(fechaAncla);
@@ -91,40 +80,59 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
   }
 
   const cargarEventos = useCallback(async () => {
-    if (!userId) return;
-
-    const eventos = await obtenerEventosLocal(userId);
+    if (!ownerId) return;
+    const eventos = await obtenerEventosLocal(ownerId);
     setEventosBase(eventos);
-
     const ids = eventos.map((e) => e.id);
     const excepciones = await obtenerExcepcionesLocal(ids);
-
     setOcurrencias(proyectarEventos(eventos, excepciones, rangoInicio, rangoFin));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, rangoInicio.getTime(), rangoFin.getTime()]);
+  }, [ownerId, rangoInicio.getTime(), rangoFin.getTime()]);
 
   useEffect(() => {
     cargarEventos();
   }, [cargarEventos]);
 
-  // Motor de sincronización: sube lo pendiente (synced: 0) y luego
-  // descarga los cambios de la nube. El pull ya protege (Fase 6) las
-  // filas con synced: 0 que hayan quedado en conflicto sin resolver.
+  const cargarCiclo = useCallback(async () => {
+    if (!ownerId) return;
+    const [logs, cache] = await Promise.all([
+      obtenerCycleLogsLocal(ownerId),
+      obtenerPrediccionCacheLocal(ownerId),
+    ]);
+    setCycleLogs(logs);
+    setPrediccionCiclo(cache);
+  }, [ownerId]);
+
+  useEffect(() => {
+    cargarCiclo();
+  }, [cargarCiclo]);
+
+  // Motor de sincronización: sube TODO lo pendiente (de cualquier
+  // calendario al que tengas acceso de edición) y descarga los datos
+  // del calendario actualmente activo.
   const sincronizar = useCallback(async () => {
-    if (!userId) return;
+    if (!ownerId) return;
     try {
-      await subirCambiosPendientes(userId);
+      await subirCambiosPendientes();
     } catch (err) {
       console.error('Error subiendo cambios pendientes:', err);
     }
     try {
-      await descargarDesdeNube(userId);
+      await descargarDesdeNube(ownerId);
     } catch (err) {
       console.error('Error en descarga desde la nube:', err);
     }
     cargarEventos();
+    cargarCiclo();
+
+    if (ownerId) {
+      const eventosParaNotificar = await obtenerEventosLocal(ownerId);
+      const idsParaNotificar = eventosParaNotificar.map((e) => e.id);
+      const excepcionesParaNotificar = await obtenerExcepcionesLocal(idsParaNotificar);
+      reprogramarTodasLasNotificaciones(eventosParaNotificar, excepcionesParaNotificar);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [ownerId]);
 
   useEffect(() => {
     sincronizar();
@@ -135,20 +143,19 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
     return () => window.removeEventListener('online', sincronizar);
   }, [sincronizar]);
 
-  // Navega al día exacto elegido en el selector de fecha (o al presionar
-  // "Ir a hoy"). getMonthGrid/getWeekGrid solo necesitan una fecha DENTRO
-  // del mes/semana para armar la grilla correcta, así que no hace falta
-  // (ni conviene) normalizar a startOfMonth/startOfWeek aquí: eso es justo
-  // lo que hacía que se resaltara el primer día en vez del día elegido.
+  useEffect(() => {
+    solicitarPermisoNotificaciones();
+  }, []);
+
   function navegarAFecha(fechaSeleccionada: Date) {
     setFechaAncla(fechaSeleccionada);
+    setDiaSeleccionadoUsuario(fechaSeleccionada);
   }
 
   function abrirModalParaCrear(dia: Date) {
-    // Hora actual (Ecuador) en punto (redondeado, sin minutos)
+    if (esEspectador) return; // solo lectura: no se puede crear
     const horaActual = ahoraEcuador().getHours();
     const horaFinNum = Math.min(horaActual + 1, 23);
-
     setDiaSeleccionado(dia);
     setOcurrenciaEditando(null);
     setHoraDefault({
@@ -159,6 +166,7 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
   }
 
   function abrirModalParaCrearHora(dia: Date, hora: number) {
+    if (esEspectador) return;
     const horaFinNum = Math.min(hora + 1, 23);
     setDiaSeleccionado(dia);
     setOcurrenciaEditando(null);
@@ -170,6 +178,8 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
   }
 
   function abrirModalParaEditar(oc: Ocurrencia) {
+    // Se permite abrir incluso en solo lectura: el modal muestra los
+    // datos con los campos deshabilitados (ver EventoModal, prop soloLectura).
     setDiaSeleccionado(oc.hora_inicio);
     setOcurrenciaEditando(oc);
     setHoraDefault(null);
@@ -207,25 +217,38 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
     return format(fechaAncla, "EEEE d 'de' MMMM", { locale: es });
   }
 
-  if (!userId) {
+  const prediccionParaFases = prediccionCiclo
+    ? {
+        avgCycleLength: prediccionCiclo.avg_cycle_length,
+        lutealLength: prediccionCiclo.luteal_length,
+        ventanaEnsanchada: prediccionCiclo.ventana_ensanchada,
+      }
+    : null;
+
+  const logsParaFases = cycleLogs.map((l) => ({
+    period_start: l.period_start,
+    period_end: l.period_end,
+    luteal_length_manual: l.luteal_length_manual,
+  }));
+
+  function obtenerFasePorFecha(dia: Date): FaseDia {
+    return calcularFaseDia(format(dia, 'yyyy-MM-dd'), logsParaFases, prediccionParaFases);
+  }
+
+  if (cargandoContexto || !userId || !ownerId) {
     return <p className="p-8 text-center text-gray-400">Cargando...</p>;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-      {/* GRUPO ENCABEZADO PRINCIPAL FIJO CON SOMBRA */}
       <div className="sticky top-0 z-40 bg-white shadow-sm">
-        {/* Encabezado con fecha clickeable que abre el selector de fecha personalizado */}
         <div className="relative flex items-center justify-between bg-white px-4 py-1">
-          {/* 1. Espaciador invisible a la izquierda para equilibrar el menú de perfil de la derecha */}
-          <div className="w-[40px]" aria-hidden="true"></div> 
+          <div className="w-[40px]" aria-hidden="true"></div>
 
-          {/* 2. Contenedor central: agrupa las flechas y la fecha juntas */}
           <div className="flex items-center gap-3">
             <button onClick={irAnterior} className="rounded-full px-3 py-1 text-gray-500 hover:bg-gray-100">
               ←
             </button>
-
             <button
               onClick={() => setMostrarSelectorFecha(true)}
               className="text-center text-base font-semibold capitalize text-gray-800 hover:text-pink-500 transition-colors"
@@ -233,15 +256,18 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
             >
               {tituloEncabezado()}
             </button>
-
             <button onClick={irSiguiente} className="rounded-full px-3 py-1 text-gray-500 hover:bg-gray-100">
               →
             </button>
           </div>
 
-          {/* 3. Menú de perfil a la derecha */}
           <div className="flex items-center gap-2">
-            <ConflictosBadge onResuelto={cargarEventos} />
+            <ConflictosBadge
+              onResuelto={() => {
+                cargarEventos();
+                cargarCiclo();
+              }}
+            />
             <PerfilMenu />
           </div>
         </div>
@@ -268,14 +294,17 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
             </button>
           ))}
         </div>
+
+        <SelectorCalendario />
       </div>
-      
+
       {vista === 'mes' && (
         <VistaMes
           dias={diasMes}
           mesActual={fechaAncla}
-          diaResaltado={fechaAncla}
+          diaResaltado={diaSeleccionadoUsuario}
           ocurrencias={ocurrencias}
+          fasePorDia={obtenerFasePorFecha}
           onCrear={abrirModalParaCrear}
           onEditar={abrirModalParaEditar}
           onDetalle={abrirDetalle}
@@ -285,7 +314,7 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
       {vista === 'semana' && (
         <VistaSemana
           dias={diasSemana}
-          diaResaltado={fechaAncla}
+          diaResaltado={diaSeleccionadoUsuario}
           ocurrencias={ocurrencias}
           onSeleccionar={abrirModalParaEditar}
           onDetalle={(ocs) => abrirDetalle(ocs[0].hora_inicio, ocs)}
@@ -304,13 +333,15 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
         />
       )}
 
-      <button
-        onClick={() => abrirModalParaCrear(vista === 'mes' ? ahoraEcuador() : fechaAncla)}
-        className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-pink-500 text-2xl text-white shadow-lg hover:bg-pink-600"
-        aria-label="Nuevo evento"
-      >
-        +
-      </button>
+      {!esEspectador && (
+        <button
+          onClick={() => abrirModalParaCrear(vista === 'mes' ? ahoraEcuador() : fechaAncla)}
+          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-pink-500 text-2xl text-white shadow-lg hover:bg-pink-600"
+          aria-label="Nuevo evento"
+        >
+          +
+        </button>
+      )}
 
       {detalleDia && (
         <DetalleDiaModal
@@ -321,10 +352,11 @@ const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
         />
       )}
 
-      {mostrarModal && diaSeleccionado && userId && (
+      {mostrarModal && diaSeleccionado && (
         <EventoModal
           fecha={diaSeleccionado}
-          userId={userId}
+          userId={ownerId}
+          soloLectura={esEspectador}
           edicion={
             ocurrenciaEditando && eventoOriginalDeEdicion
               ? { ocurrencia: ocurrenciaEditando, eventoOriginal: eventoOriginalDeEdicion }
@@ -351,16 +383,16 @@ function VistaMes({
   mesActual,
   diaResaltado,
   ocurrencias,
+  fasePorDia,
   onCrear,
   onEditar,
   onDetalle,
 }: {
   dias: Date[];
   mesActual: Date;
-  // Día exacto elegido por el usuario (vía el selector de fecha o al navegar):
-  // se resalta distinto del día de hoy.
-  diaResaltado: Date;
+  diaResaltado: Date | null;
   ocurrencias: Ocurrencia[];
+  fasePorDia: (dia: Date) => FaseDia;
   onCrear: (dia: Date) => void;
   onEditar: (oc: Ocurrencia) => void;
   onDetalle: (fecha: Date, ocs: Ocurrencia[]) => void;
@@ -390,13 +422,14 @@ function VistaMes({
 
           const dentroDelMes = isSameMonth(dia, mesActual);
           const esHoy = isSameDay(dia, ahoraEcuador());
-          const esSeleccionado = isSameDay(dia, diaResaltado);
+          const esSeleccionado = diaResaltado ? isSameDay(dia, diaResaltado) : false;
+          const fase = fasePorDia(dia);
 
           return (
             <div
               key={dia.toISOString()}
               onClick={() => onCrear(dia)}
-              className={`flex min-h-[96px] cursor-pointer flex-col bg-white p-1 ${
+              className={`relative flex min-h-[96px] cursor-pointer flex-col bg-white p-1 ${
                 dentroDelMes ? '' : 'opacity-40'
               } ${esSeleccionado && !esHoy ? 'bg-pink-50/70' : ''}`}
             >
@@ -411,6 +444,15 @@ function VistaMes({
               >
                 {format(dia, 'd')}
               </span>
+
+              {fase && (
+                <span
+                  className="absolute right-1 top-1 text-[11px]"
+                  title={NOMBRES_FASE[fase.fase]}
+                >
+                  {ICONOS_FASE[fase.fase]}
+                </span>
+              )}
 
               <div className="mt-0.5 flex flex-1 flex-col gap-0.5">
                 {chipsVisibles.map((oc) => (

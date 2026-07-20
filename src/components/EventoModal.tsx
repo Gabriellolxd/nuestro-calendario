@@ -1,18 +1,24 @@
 // src/components/EventoModal.tsx
 'use client';
 import { useState, useRef } from 'react';
+import { ecuadorToUtc } from '@/lib/dates';
+import { getDeviceId } from '@/lib/device';
+import { PALETA_COLORES } from '@/lib/colors';
+import { format } from 'date-fns';
+import type { EventoBase, Ocurrencia, TipoRecurrencia } from '@/lib/recurrence';
 import {
   crearEventoLocal,
   actualizarEventoLocal,
   eliminarEventoLocal,
   upsertExcepcionLocal,
 } from '@/lib/localData';
-import { ecuadorToUtc } from '@/lib/dates';
-import { getDeviceId } from '@/lib/device';
-import { PALETA_COLORES } from '@/lib/colors';
-import { format } from 'date-fns';
-import type { EventoBase, Ocurrencia, TipoRecurrencia } from '@/lib/recurrence';
 import { subirCambiosPendientes } from '@/lib/sync';
+import {
+  programarNotificacionEvento,
+  cancelarNotificacionEvento,
+  programarNotificacionExcepcion,
+  cancelarNotificacionExcepcion,
+} from '@/lib/notifications';
 
 type ModoEdicion = {
   ocurrencia: Ocurrencia;
@@ -23,8 +29,9 @@ type Props = {
   fecha: Date;
   userId: string;
   edicion?: ModoEdicion;
-  horaInicioDefault?: string; // ej. "14:00", solo aplica al crear
-  horaFinDefault?: string; // ej. "15:00", solo aplica al crear
+  horaInicioDefault?: string;
+  horaFinDefault?: string;
+  soloLectura?: boolean;
   onClose: () => void;
   onGuardado: () => void;
 };
@@ -35,6 +42,7 @@ export default function EventoModal({
   edicion,
   horaInicioDefault,
   horaFinDefault,
+  soloLectura = false,
   onClose,
   onGuardado,
 }: Props) {
@@ -56,6 +64,7 @@ export default function EventoModal({
   const [tipoRecurrencia, setTipoRecurrencia] = useState<TipoRecurrencia>(
     edicion?.eventoOriginal.tipo_recurrencia ?? 'none'
   );
+  const [minutosAviso, setMinutosAviso] = useState(edicion?.eventoOriginal.minutos_aviso ?? 5);
   const [alcance, setAlcance] = useState<'unica' | 'serie'>('unica');
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
@@ -80,8 +89,10 @@ export default function EventoModal({
       const nuevaHoraFinUtc = ecuadorToUtc(fechaEditable, horaFin);
 
       if (!edicion) {
+        // --- CREACIÓN ---
+        const nuevoId = crypto.randomUUID();
         await crearEventoLocal({
-          id: crypto.randomUUID(),
+          id: nuevoId,
           user_id: userId,
           titulo,
           descripcion: descripcion || null,
@@ -90,12 +101,25 @@ export default function EventoModal({
           hora_fin: nuevaHoraFinUtc,
           tipo_recurrencia: tipoRecurrencia,
           regla_recurrencia: null,
+          minutos_aviso: minutosAviso,
           device_id: deviceId,
           change_uuid: crypto.randomUUID(),
           client_updated_at: ahora,
           deleted_at: null,
         });
+
+        await programarNotificacionEvento({
+          id: nuevoId,
+          titulo,
+          descripcion: descripcion || null,
+          hex_color: color,
+          hora_inicio: nuevaHoraInicioUtc,
+          hora_fin: nuevaHoraFinUtc,
+          tipo_recurrencia: tipoRecurrencia,
+          minutos_aviso: minutosAviso,
+        });
       } else if (!esRecurrente || alcance === 'serie') {
+        // --- EDICIÓN de evento único, o de TODA la serie recurrente ---
         await actualizarEventoLocal(edicion.eventoOriginal.id, {
           titulo,
           descripcion: descripcion || null,
@@ -103,14 +127,29 @@ export default function EventoModal({
           hora_inicio: nuevaHoraInicioUtc,
           hora_fin: nuevaHoraFinUtc,
           tipo_recurrencia: tipoRecurrencia,
+          minutos_aviso: minutosAviso,
           device_id: deviceId,
           change_uuid: crypto.randomUUID(),
           client_updated_at: ahora,
         });
+
+        await programarNotificacionEvento({
+          id: edicion.eventoOriginal.id,
+          titulo,
+          descripcion: descripcion || null,
+          hex_color: color,
+          hora_inicio: nuevaHoraInicioUtc,
+          hora_fin: nuevaHoraFinUtc,
+          tipo_recurrencia: tipoRecurrencia,
+          minutos_aviso: minutosAviso,
+        });
       } else {
+        // --- EDICIÓN de SOLO ESTA ocurrencia (excepción puntual) ---
         const fechaClave = format(edicion.ocurrencia.fecha, 'yyyy-MM-dd');
+        const excepcionId = edicion.ocurrencia.exceptionId ?? crypto.randomUUID();
+
         await upsertExcepcionLocal({
-          id: edicion.ocurrencia.exceptionId ?? crypto.randomUUID(),
+          id: excepcionId,
           event_base_id: edicion.eventoOriginal.id,
           fecha_excepcion: fechaClave,
           nuevo_titulo: titulo,
@@ -123,11 +162,25 @@ export default function EventoModal({
           client_updated_at: ahora,
           deleted_at: null,
         });
+
+        await programarNotificacionExcepcion(
+          {
+            id: excepcionId,
+            event_base_id: edicion.eventoOriginal.id,
+            fecha_excepcion: fechaClave,
+            nuevo_titulo: titulo,
+            nuevo_hex_color: color,
+            nueva_hora_inicio: nuevaHoraInicioUtc,
+            nueva_hora_fin: nuevaHoraFinUtc,
+            is_cancelled: false,
+          },
+          edicion.eventoOriginal
+        );
       }
 
       onGuardado();
       onClose();
-      subirCambiosPendientes(userId).catch((err) => console.error('Error sincronizando:', err));
+      subirCambiosPendientes().catch((err) => console.error('Error sincronizando:', err));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar el evento.');
     } finally {
@@ -145,10 +198,13 @@ export default function EventoModal({
 
       if (!esRecurrente || alcance === 'serie') {
         await eliminarEventoLocal(edicion.eventoOriginal.id, deviceId);
+        await cancelarNotificacionEvento(edicion.eventoOriginal.id);
       } else {
         const fechaClave = format(edicion.ocurrencia.fecha, 'yyyy-MM-dd');
+        const excepcionId = edicion.ocurrencia.exceptionId ?? crypto.randomUUID();
+
         await upsertExcepcionLocal({
-          id: edicion.ocurrencia.exceptionId ?? crypto.randomUUID(),
+          id: excepcionId,
           event_base_id: edicion.eventoOriginal.id,
           fecha_excepcion: fechaClave,
           nuevo_titulo: null,
@@ -161,11 +217,13 @@ export default function EventoModal({
           client_updated_at: ahora,
           deleted_at: null,
         });
+
+        await cancelarNotificacionExcepcion(excepcionId);
       }
 
       onGuardado();
       onClose();
-      subirCambiosPendientes(userId).catch((err) => console.error('Error sincronizando:', err));
+      subirCambiosPendientes().catch((err) => console.error('Error sincronizando:', err));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al eliminar el evento.');
     } finally {
@@ -180,7 +238,8 @@ export default function EventoModal({
           {esEdicion ? 'Editar evento' : 'Nuevo evento'} — {format(fecha, 'd MMM yyyy')}
         </h2>
 
-        <form onSubmit={handleGuardar} className="space-y-3">
+        <form onSubmit={handleGuardar}>
+        <fieldset disabled={soloLectura} className="space-y-3">
           <input
             type="text"
             placeholder="Título"
@@ -288,6 +347,22 @@ export default function EventoModal({
             </select>
           </div>
 
+          <div>
+            <label className="text-xs text-gray-500">Avisar antes</label>
+            <select
+              value={minutosAviso}
+              onChange={(e) => setMinutosAviso(Number(e.target.value))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            >
+              <option value={0}>Al momento del evento</option>
+              <option value={5}>5 minutos antes</option>
+              <option value={10}>10 minutos antes</option>
+              <option value={30}>30 minutos antes</option>
+              <option value={60}>1 hora antes</option>
+              <option value={1440}>1 día antes</option>
+            </select>
+          </div>
+
           {esRecurrente && (
             <div className="rounded-lg bg-pink-50 p-3">
               <p className="mb-2 text-xs font-medium text-gray-600">
@@ -305,18 +380,25 @@ export default function EventoModal({
               </div>
             </div>
           )}
+        </fieldset>
 
           {error && <p className="text-sm text-red-500">{error}</p>}
 
-          <div className="flex gap-2 pt-2">
+          {soloLectura && (
+            <p className="mt-3 rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-500">
+              👁️ Modo solo lectura — no tienes permiso de edición sobre este calendario.
+            </p>
+          )}
+
+          <div className="mt-3 flex gap-2 pt-2">
             <button
               type="button"
               onClick={onClose}
               className="flex-1 rounded-lg border border-gray-300 py-2 text-gray-600"
             >
-              Cancelar
+              {soloLectura ? 'Cerrar' : 'Cancelar'}
             </button>
-            {esEdicion && (
+            {!soloLectura && esEdicion && (
               <button
                 type="button"
                 onClick={handleEliminar}
@@ -326,13 +408,15 @@ export default function EventoModal({
                 Eliminar
               </button>
             )}
-            <button
-              type="submit"
-              disabled={cargando}
-              className="flex-1 rounded-lg bg-pink-500 py-2 font-medium text-white hover:bg-pink-600 disabled:opacity-50"
-            >
-              {cargando ? 'Guardando...' : 'Guardar'}
-            </button>
+            {!soloLectura && (
+              <button
+                type="submit"
+                disabled={cargando}
+                className="flex-1 rounded-lg bg-pink-500 py-2 font-medium text-white hover:bg-pink-600 disabled:opacity-50"
+              >
+                {cargando ? 'Guardando...' : 'Guardar'}
+              </button>
+            )}
           </div>
         </form>
       </div>

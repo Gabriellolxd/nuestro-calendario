@@ -10,9 +10,10 @@ export type EventoBase = {
   titulo: string;
   descripcion: string | null;
   hex_color: string;
-  hora_inicio: string; // ISO UTC
-  hora_fin: string; // ISO UTC
+  hora_inicio: string;
+  hora_fin: string;
   tipo_recurrencia: TipoRecurrencia;
+  minutos_aviso: number;
 };
 
 export type Excepcion = {

@@ -7,9 +7,7 @@ import TimelineColumna, { ALTURA_HORA } from './TimelineColumna';
 
 type Props = {
   dias: Date[];
-  // Día actualmente seleccionado/anclado (el que se eligió en el selector
-  // de fecha o al navegar): se resalta distinto del día de hoy.
-  diaResaltado: Date;
+  diaResaltado: Date | null; 
   ocurrencias: Ocurrencia[];
   onSeleccionar: (oc: Ocurrencia) => void;
   onDetalle: (ocurrencias: Ocurrencia[]) => void;
@@ -45,7 +43,7 @@ export default function VistaSemana({
         {dias.map((dia) => {
           const ocDia = ocurrencias.filter((oc) => isSameDay(oc.hora_inicio, dia));
           const esHoy = isSameDay(dia, hoy);
-          const esSeleccionado = isSameDay(dia, diaResaltado);
+          const esSeleccionado = diaResaltado ? isSameDay(dia, diaResaltado) : false;
 
           return (
             <div

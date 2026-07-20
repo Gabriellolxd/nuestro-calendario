@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">nuestro-calendario</string>
+    <string name="title_activity_main">nuestro-calendario</string>
+    <string name="package_name">com.dani.nuestrocalendario</string>
+    <string name="custom_url_scheme">com.dani.nuestrocalendario</string>
+</resources>

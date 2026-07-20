@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-type EntityType = 'event' | 'event_exception';
+type EntityType = 'event' | 'event_exception' | 'cycle_log';
 
 type CambioEntrante = {
   entity_type: EntityType;
@@ -17,6 +17,16 @@ function datosComparables(fila: Record<string, any>) {
   const copia = { ...fila };
   for (const campo of CAMPOS_IGNORADOS) delete copia[campo];
   return copia;
+}
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
 }
 
 export async function POST(req: NextRequest) {
@@ -47,7 +57,7 @@ export async function POST(req: NextRequest) {
   }> = [];
 
   for (const cambio of cambios) {
-    const tabla = cambio.entity_type === 'event' ? 'events' : 'event_exceptions';
+    const tabla = cambio.entity_type === 'event' ? 'events' : cambio.entity_type === 'event_exception' ? 'event_exceptions' : 'cycle_logs';
     const { origen_offline: origenOfflineEntrante, ...datosEntrante } = cambio.data;
 
     const { data: filaExistente, error: selError } = await supabaseUser
@@ -88,7 +98,13 @@ export async function POST(req: NextRequest) {
     const tsEntrante = new Date(datosEntrante.client_updated_at).getTime();
     const diffMs = Math.abs(tsEntrante - tsExistente);
 
-    const esConflicto = diffMs <= UMBRAL_CONFLICTO_MS || origenOfflineEntrante === 1;
+    // Un conflicto real solo existe entre DOS dispositivos distintos.
+    // Si el dispositivo que sube el cambio es el mismo que ya tenía el
+    // servidor, es simplemente una edición secuencial tuya (o un falso
+    // "offline" por navigator.onLine poco confiable) — nunca un choque
+    // real con otra persona. Se aplica LWW automático sin preguntar.
+    const mismoDispositivo = filaExistente.device_id === datosEntrante.device_id;
+    const esConflicto = !mismoDispositivo && (diffMs <= UMBRAL_CONFLICTO_MS || origenOfflineEntrante === 1);
 
     if (esConflicto) {
       const payloadConflicto = {
@@ -139,5 +155,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ resultados });
+  return NextResponse.json({ resultados }, { headers: corsHeaders });
 }

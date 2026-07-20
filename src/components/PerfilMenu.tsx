@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 export default function PerfilMenu() {
   const [abierto, setAbierto] = useState(false);
@@ -44,6 +45,15 @@ export default function PerfilMenu() {
 
       {abierto && (
         <div className="absolute right-0 top-11 z-50 w-48 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+          <Link
+            href="/ciclo"
+            onClick={() => setAbierto(false)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <span className="text-base">🩸</span>
+            Ciclo menstrual
+          </Link>
+          
           <button
             onClick={handleCerrarSesion}
             className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-500 hover:bg-red-50"
