@@ -8,8 +8,6 @@ function esNativo(): boolean {
   return Capacitor.isNativePlatform();
 }
 
-// Convierte cualquier string (UUID) a un entero de 32 bits estable — Android
-// exige IDs numéricos para las notificaciones programadas.
 function hashANumero(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -33,12 +31,33 @@ const REPEAT_MAP: Partial<Record<TipoRecurrencia, 'day' | 'week' | 'month' | 'ye
   yearly: 'year',
 };
 
+// Canal de notificación propio: en Android 8+ el sonido/vibración/
+// importancia se configuran a nivel de CANAL, no por notificación
+// individual — por eso hay que crearlo una vez al iniciar la app.
+// IMPORTANTE: el nombre del archivo de sonido debe existir en
+// android/app/src/main/res/raw/ (ver instrucciones en el chat) ANTES
+// de instalar la app — si el canal ya se creó una vez con el sonido
+// por defecto, Android IGNORA cambios posteriores al mismo id de canal.
+// Si cambias el sonido después de la primera instalación, sube el
+// número de CHANNEL_ID (ej. a 'eventos-nuestro-calendario-v2').
+const CHANNEL_ID = 'eventos-nuestro-calendario-v2';
+const NOMBRE_ARCHIVO_SONIDO = 'notificacion_evento.wav'; // sin la carpeta, tal cual el archivo en res/raw/
+
 export async function solicitarPermisoNotificaciones() {
   if (!esNativo()) return;
   try {
     await LocalNotifications.requestPermissions();
+    await LocalNotifications.createChannel({
+      id: CHANNEL_ID,
+      name: 'Eventos del calendario',
+      description: 'Avisos de eventos de nuestro-calendario',
+      importance: 5, // máxima: permite heads-up + sonido
+      sound: NOMBRE_ARCHIVO_SONIDO,
+      visibility: 1,
+      vibration: true,
+    });
   } catch (err) {
-    console.error('Error solicitando permiso de notificaciones:', err);
+    console.error('Error solicitando permiso / creando canal:', err);
   }
 }
 
@@ -60,14 +79,6 @@ export async function cancelarNotificacionExcepcion(excepcionId: string) {
   }
 }
 
-// Programa (o reprograma) la notificación de un evento base. Si es
-// recurrente, usa el modo "repeats" nativo de Android — una sola
-// notificación que se repite sola, en vez de crear una por cada ocurrencia
-// futura. Limitación conocida: si luego se excepciona UN día puntual de
-// la serie, esta notificación base sigue sonando ese día igual (Android
-// no permite "saltar" una sola repetición nativa) — se compensa
-// mostrando/cancelando por separado la notificación de la excepción,
-// pero ambas pueden sonar el mismo día en ese caso puntual.
 export async function programarNotificacionEvento(evento: EventoBase) {
   if (!esNativo()) return;
   await cancelarNotificacionEvento(evento.id);
@@ -77,9 +88,7 @@ export async function programarNotificacionEvento(evento: EventoBase) {
   const disparo = new Date(horaInicioEcuador.getTime() - evento.minutos_aviso * 60000);
 
   const esRecurrente = evento.tipo_recurrencia !== 'none';
-  if (!esRecurrente && disparo.getTime() < Date.now()) {
-    return; // evento único ya pasado: no tiene sentido programar
-  }
+  if (!esRecurrente && disparo.getTime() < Date.now()) return;
 
   const schedule: any = { at: disparo, allowWhileIdle: true };
   if (esRecurrente) {
@@ -87,13 +96,19 @@ export async function programarNotificacionEvento(evento: EventoBase) {
     schedule.every = REPEAT_MAP[evento.tipo_recurrencia];
   }
 
+  const cuerpo = evento.descripcion || 'Toca para ver el detalle en nuestro-calendario';
+
   try {
     await LocalNotifications.schedule({
       notifications: [
         {
           id: idParaEvento(evento.id),
           title: evento.titulo,
-          body: evento.descripcion || 'Tienes un evento próximo en nuestro-calendario',
+          body: cuerpo,
+          largeBody: cuerpo,
+          summary: evento.titulo,
+          channelId: CHANNEL_ID,
+          smallIcon: 'ic_stat_notify',
           schedule,
         },
       ],
@@ -103,11 +118,6 @@ export async function programarNotificacionEvento(evento: EventoBase) {
   }
 }
 
-// Programa la notificación de una excepción puntual (un día movido o con
-// hora distinta). Si la excepción CANCELA la ocurrencia (is_cancelled),
-// solo cancela cualquier notificación propia de esa excepción — no puede
-// silenciar la notificación recurrente base de ese día (ver limitación
-// arriba).
 export async function programarNotificacionExcepcion(
   excepcion: Excepcion,
   eventoBase: EventoBase
@@ -121,13 +131,18 @@ export async function programarNotificacionExcepcion(
   const disparo = new Date(horaInicioEcuador.getTime() - eventoBase.minutos_aviso * 60000);
   if (disparo.getTime() < Date.now()) return;
 
+  const titulo = excepcion.nuevo_titulo ?? eventoBase.titulo;
+
   try {
     await LocalNotifications.schedule({
       notifications: [
         {
           id: idParaExcepcion(excepcion.id),
-          title: excepcion.nuevo_titulo ?? eventoBase.titulo,
-          body: 'Tienes un evento próximo en nuestro-calendario',
+          title: titulo,
+          body: 'Toca para ver el detalle en nuestro-calendario',
+          summary: titulo,
+          channelId: CHANNEL_ID,
+          smallIcon: 'ic_stat_notify',
           schedule: { at: disparo, allowWhileIdle: true },
         },
       ],
@@ -137,9 +152,6 @@ export async function programarNotificacionExcepcion(
   }
 }
 
-// Reprograma TODAS las notificaciones a partir de lo que hay en Dexie —
-// se llama tras cada sync (pull), porque eventos creados por el otro
-// dispositivo (tu pareja) también deben notificar en este teléfono.
 export async function reprogramarTodasLasNotificaciones(
   eventos: EventoBase[],
   excepciones: Excepcion[]

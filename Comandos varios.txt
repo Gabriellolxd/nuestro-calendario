@@ -5,3 +5,22 @@ npm run dev
 git add .
 git commit -m "Feat: ---"
 git push
+
+-- Para actualizar APK --
+npm run build:capacitor
+npx cap sync android
+
+Luego en Android Studio: Build → Generate Signed Bundle/APK, mismo keystore que ya creaste 
+(así Android lo reconoce como "actualización" y no pierdes los datos locales — 
+aunque igual no importa mucho porque tus datos reales viven en Supabase, Dexie es solo caché).
+
+
+
+
+-- RECOMENDACIONES --
+Cómo confirmar que ya sí sube (antes de gastar tiempo regenerando el .apk a ciegas)
+Conecta el celular por USB con "Depuración USB" activada (Ajustes → Opciones de desarrollador), 
+y en Chrome de tu computadora ve a chrome://inspect. Ahí debería aparecer tu app como una pestaña 
+inspeccionable — ábrela y mira la consola. Si ves errores de red o CORS ahí, esa consola te va a 
+decir exactamente qué está fallando la próxima vez. Es la herramienta más útil que tienes para 
+depurar la app instalada, mucho más rápido que reconstruir el .apk a cada rato para adivinar.

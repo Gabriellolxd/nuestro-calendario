@@ -57,7 +57,9 @@ export async function subirCambiosPendientes(): Promise<{ huboConflictos: boolea
   // para recalcular la predicción de la persona correcta, no solo la tuya.
   const userIdPorCycleLogId = new Map(cycleLogsPendientes.map((c) => [c.id, c.user_id]));
 
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
+  // .replace(/\/$/, '') quita cualquier barra final que quede en la env
+  // var por accidente, para nunca volver a generar una doble barra.
+  const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
   const res = await fetch(`${apiBase}/api/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

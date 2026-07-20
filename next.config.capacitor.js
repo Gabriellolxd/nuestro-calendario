@@ -8,7 +8,7 @@ const nextConfig = {
   trailingSlash: true,
   images: { unoptimized: true },
   env: {
-    NEXT_PUBLIC_API_BASE_URL: 'https://nuestro-calendario-phi.vercel.app/',
+    NEXT_PUBLIC_API_BASE_URL: 'https://nuestro-calendario-phi.vercel.app',  //No debe terminar en "/"
   },
   typescript: {
     // La validación de tipos de Next para rutas API (typedRoutes) se

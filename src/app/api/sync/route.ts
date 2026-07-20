@@ -32,7 +32,7 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (!authHeader) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401, headers: corsHeaders });
   }
   const token = authHeader.replace('Bearer ', '');
 
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   const { data: userData, error: userError } = await supabaseUser.auth.getUser(token);
   if (userError || !userData.user) {
-    return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    return NextResponse.json({ error: 'Token inválido' }, { status: 401, headers: corsHeaders });
   }
 
   const body = await req.json();
