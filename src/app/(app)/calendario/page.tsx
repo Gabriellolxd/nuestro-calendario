@@ -79,6 +79,9 @@ export default function CalendarioPage() {
     rangoFin = endOfDay(fechaAncla);
   }
 
+  const rangoInicioMs = rangoInicio.getTime();
+  const rangoFinMs = rangoFin.getTime();
+
   const cargarEventos = useCallback(async () => {
     if (!ownerId) return;
     const eventos = await obtenerEventosLocal(ownerId);
@@ -87,7 +90,7 @@ export default function CalendarioPage() {
     const excepciones = await obtenerExcepcionesLocal(ids);
     setOcurrencias(proyectarEventos(eventos, excepciones, rangoInicio, rangoFin));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerId, rangoInicio.getTime(), rangoFin.getTime()]);
+  }, [ownerId, rangoInicioMs, rangoFinMs]);
 
   useEffect(() => {
     cargarEventos();
