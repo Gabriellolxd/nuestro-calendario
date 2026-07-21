@@ -220,6 +220,7 @@ export default function CalendarioPage() {
   const prediccionParaFases = prediccionCiclo
     ? {
         avgCycleLength: prediccionCiclo.avg_cycle_length,
+        avgPeriodDuration: prediccionCiclo.avg_period_duration,
         lutealLength: prediccionCiclo.luteal_length,
         ventanaEnsanchada: prediccionCiclo.ventana_ensanchada,
       }
