@@ -45,6 +45,7 @@ function horaLegible(iso: string | null): string {
   return format(utcToEcuador(iso), 'HH:mm');
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- local/servidor mezclan la forma de 3 tablas distintas según tipo
 function construirFilas(tipo: 'event' | 'event_exception' | 'cycle_log', local: any, servidor: any): Fila[] {
   if (tipo === 'cycle_log') {
     const filasBase = CAMPOS_CICLO.map(([campo, etiqueta]) => ({

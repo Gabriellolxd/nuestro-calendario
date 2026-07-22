@@ -51,6 +51,7 @@ export default function CicloPage() {
   }, [ownerId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial al montar/cambiar de calendario
     cargarTodo();
   }, [cargarTodo]);
 

@@ -93,6 +93,7 @@ export default function CalendarioPage() {
   }, [ownerId, rangoInicioMs, rangoFinMs]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial al montar/cambiar de calendario
     cargarEventos();
   }, [cargarEventos]);
 
@@ -107,6 +108,7 @@ export default function CalendarioPage() {
   }, [ownerId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial del ciclo al montar/cambiar de calendario
     cargarCiclo();
   }, [cargarCiclo]);
 
@@ -138,6 +140,7 @@ export default function CalendarioPage() {
   }, [ownerId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- dispara el motor de sync al montar
     sincronizar();
   }, [sincronizar]);
 

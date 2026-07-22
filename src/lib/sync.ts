@@ -102,10 +102,12 @@ export type ConflictoConDetalles = {
   entity_type: EntityType;
   entity_id: string;
   device_id_local: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- puede ser la forma de events, event_exceptions o cycle_logs; tipar cada variante aquí no aporta seguridad real
   datos_locales: Record<string, any>;
   local_updated_at: string;
   local_origen_offline: boolean;
   device_id_servidor: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   datos_servidor: Record<string, any>;
   server_updated_at: string;
   device_local?: { label: string } | null;
@@ -137,6 +139,7 @@ export async function resolverConflicto(conflicto: ConflictoConDetalles, eleccio
     change_uuid: crypto.randomUUID(),
     client_updated_at: ahora,
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- datosFinales mezcla campos de 3 tablas distintas según el tipo de conflicto
   delete (datosFinales as any).synced;
 
   const { error: updError } = await supabase.from(tabla).upsert(datosFinales, { onConflict: 'id' });
@@ -149,9 +152,11 @@ export async function resolverConflicto(conflicto: ConflictoConDetalles, eleccio
   if (resError) throw resError;
 
   const tablaLocal = tablaLocalPara(conflicto.entity_type);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tablaLocal cambia de tipo según entity_type (events/exceptions/cycle_logs)
   await tablaLocal.put({ ...datosFinales, synced: 1, origen_offline: 0 } as any);
 
   if (conflicto.entity_type === 'cycle_log') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await recalcularYGuardarPrediccion((datosFinales as any).user_id);
   }
 }

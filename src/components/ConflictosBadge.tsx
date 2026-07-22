@@ -22,6 +22,7 @@ export default function ConflictosBadge({ onResuelto }: Props) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial del contador al montar
     cargarCantidad();
   }, [cargarCantidad]);
 

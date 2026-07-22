@@ -31,17 +31,17 @@ const REPEAT_MAP: Partial<Record<TipoRecurrencia, 'day' | 'week' | 'month' | 'ye
   yearly: 'year',
 };
 
-// Canal de notificación propio: en Android 8+ el sonido/vibración/
-// importancia se configuran a nivel de CANAL, no por notificación
-// individual — por eso hay que crearlo una vez al iniciar la app.
-// IMPORTANTE: el nombre del archivo de sonido debe existir en
-// android/app/src/main/res/raw/ (ver instrucciones en el chat) ANTES
-// de instalar la app — si el canal ya se creó una vez con el sonido
-// por defecto, Android IGNORA cambios posteriores al mismo id de canal.
-// Si cambias el sonido después de la primera instalación, sube el
-// número de CHANNEL_ID (ej. a 'eventos-nuestro-calendario-v2').
+// Tipo local para el schedule (evita "any" sin depender del nombre exacto
+// del tipo interno del plugin, que puede variar entre versiones).
+type ScheduleConfig = {
+  at: Date;
+  allowWhileIdle?: boolean;
+  repeats?: boolean;
+  every?: 'year' | 'month' | 'two-weeks' | 'week' | 'day' | 'hour' | 'minute' | 'second';
+};
+
 const CHANNEL_ID = 'eventos-nuestro-calendario-v2';
-const NOMBRE_ARCHIVO_SONIDO = 'notificacion_evento.wav'; // sin la carpeta, tal cual el archivo en res/raw/
+const NOMBRE_ARCHIVO_SONIDO = 'notificacion_evento.wav';
 
 export async function solicitarPermisoNotificaciones() {
   if (!esNativo()) return;
@@ -51,7 +51,7 @@ export async function solicitarPermisoNotificaciones() {
       id: CHANNEL_ID,
       name: 'Eventos del calendario',
       description: 'Avisos de eventos de nuestro-calendario',
-      importance: 5, // máxima: permite heads-up + sonido
+      importance: 5,
       sound: NOMBRE_ARCHIVO_SONIDO,
       visibility: 1,
       vibration: true,
@@ -90,7 +90,7 @@ export async function programarNotificacionEvento(evento: EventoBase) {
   const esRecurrente = evento.tipo_recurrencia !== 'none';
   if (!esRecurrente && disparo.getTime() < Date.now()) return;
 
-  const schedule: any = { at: disparo, allowWhileIdle: true };
+  const schedule: ScheduleConfig = { at: disparo, allowWhileIdle: true };
   if (esRecurrente) {
     schedule.repeats = true;
     schedule.every = REPEAT_MAP[evento.tipo_recurrencia];
@@ -106,7 +106,6 @@ export async function programarNotificacionEvento(evento: EventoBase) {
           title: evento.titulo,
           body: cuerpo,
           largeBody: cuerpo,
-          summary: evento.titulo,
           channelId: CHANNEL_ID,
           smallIcon: 'ic_stat_name',
           schedule,
@@ -140,7 +139,6 @@ export async function programarNotificacionExcepcion(
           id: idParaExcepcion(excepcion.id),
           title: titulo,
           body: 'Toca para ver el detalle en nuestro-calendario',
-          summary: titulo,
           channelId: CHANNEL_ID,
           smallIcon: 'ic_stat_name',
           schedule: { at: disparo, allowWhileIdle: true },

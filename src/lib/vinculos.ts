@@ -9,6 +9,12 @@ export type CalendarioDisponible = {
   label: string;
 };
 
+type FilaVinculo = {
+  owner_user_id: string;
+  role: string;
+  profiles: { email: string } | null;
+};
+
 export async function obtenerCalendariosDisponibles(userId: string): Promise<CalendarioDisponible[]> {
   const resultado: CalendarioDisponible[] = [
     { ownerId: userId, rol: 'propio', label: 'Mi calendario' },
@@ -24,8 +30,10 @@ export async function obtenerCalendariosDisponibles(userId: string): Promise<Cal
     return resultado;
   }
 
-  for (const fila of data ?? []) {
-    const email = (fila as any).profiles?.email ?? 'Calendario vinculado';
+  const filas = (data ?? []) as unknown as FilaVinculo[];
+
+  for (const fila of filas) {
+    const email = fila.profiles?.email ?? 'Calendario vinculado';
     resultado.push({
       ownerId: fila.owner_user_id,
       rol: fila.role === 'editor' ? 'editor' : 'espectador',

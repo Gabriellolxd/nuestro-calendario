@@ -1,3 +1,4 @@
+//eslint.config.mjs
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
@@ -12,6 +13,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Scripts auxiliares que corren en Node puro (CommonJS), no forman
+    // parte del build de Next.js — no deben validarse con las reglas
+    // de ESLint pensadas para código de la app.
+    "scripts/**",
   ]),
 ]);
 
