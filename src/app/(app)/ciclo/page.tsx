@@ -19,6 +19,7 @@ import { addMonths, subMonths } from 'date-fns';
 import { calcularFaseDia, ICONOS_FASE, NOMBRES_FASE, type FaseDia, type CycleLogInput } from '@/lib/cyclePrediction';
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import CicloDiaModal from '@/components/CicloDiaModal';
+import SyncStatusButton from '@/components/SyncStatusButton';
 
 function fechaAISO(dia: Date): string {
   return format(dia, 'yyyy-MM-dd');
@@ -29,7 +30,7 @@ function fechaLegible(iso: string, patron = 'd MMM yyyy'): string {
 }
 
 export default function CicloPage() {
-  const { calendarioActivo, cargando: cargandoContexto } = useCalendarioActivo();
+  const { calendarioActivo, cargando: cargandoContexto, syncTick } = useCalendarioActivo();
   const ownerId = calendarioActivo?.ownerId ?? null;
   const esEspectador = calendarioActivo?.rol === 'espectador';
   const router = useRouter();
@@ -50,10 +51,11 @@ export default function CicloPage() {
     setPrediccion(cache);
   }, [ownerId]);
 
+
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial al montar/cambiar de calendario
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial y tras cada ciclo de sync
     cargarTodo();
-  }, [cargarTodo]);
+  }, [cargarTodo, syncTick]);
 
   const logsInput: CycleLogInput[] = logs.map((l) => ({
     period_start: l.period_start,
@@ -153,6 +155,7 @@ export default function CicloPage() {
           <h1 className="flex-1 text-base font-semibold text-gray-800">
             🩸 Ciclo menstrual {calendarioActivo?.rol !== 'propio' && `— ${calendarioActivo?.label}`}
           </h1>
+          <SyncStatusButton />
         </div>
         <div className="flex items-center justify-between px-4 pb-2">
           <button onClick={() => setFechaAncla((f) => subMonths(f, 1))} className="rounded-full px-3 py-1 text-gray-500 hover:bg-gray-100">

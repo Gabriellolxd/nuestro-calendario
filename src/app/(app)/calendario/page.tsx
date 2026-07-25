@@ -26,15 +26,14 @@ import { proyectarEventos, type EventoBase, type Excepcion, type Ocurrencia } fr
 import {
   obtenerEventosLocal,
   obtenerExcepcionesLocal,
-  descargarDesdeNube,
   obtenerCycleLogsLocal,
   obtenerPrediccionCacheLocal,
 } from '@/lib/localData';
-import { subirCambiosPendientes } from '@/lib/sync';
 import ConflictosBadge from '@/components/ConflictosBadge';
 import { calcularFaseDia, ICONOS_FASE, NOMBRES_FASE, type FaseDia } from '@/lib/cyclePrediction';
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import { solicitarPermisoNotificaciones, reprogramarTodasLasNotificaciones } from '@/lib/notifications';
+import SyncStatusButton from '@/components/SyncStatusButton';
 
 const MAX_CHIPS_MES = 4;
 
@@ -112,42 +111,27 @@ export default function CalendarioPage() {
     cargarCiclo();
   }, [cargarCiclo]);
 
-  // Motor de sincronización: sube TODO lo pendiente (de cualquier
-  // calendario al que tengas acceso de edición) y descarga los datos
-  // del calendario actualmente activo.
-  const sincronizar = useCallback(async () => {
-    if (!ownerId) return;
-    try {
-      await subirCambiosPendientes();
-    } catch (err) {
-      console.error('Error subiendo cambios pendientes:', err);
-    }
-    try {
-      await descargarDesdeNube(ownerId);
-    } catch (err) {
-      console.error('Error en descarga desde la nube:', err);
-    }
-    cargarEventos();
-    cargarCiclo();
+  const { syncTick } = useCalendarioActivo();
 
-    if (ownerId) {
-      const eventosParaNotificar = await obtenerEventosLocal(ownerId);
+  useEffect(() => {
+    if (!ownerId) return;
+    const ownerIdActual = ownerId; // fija el tipo a `string` para el resto de este efecto
+
+    async function recargarTrasSync() {
+      cargarEventos();
+      cargarCiclo();
+
+      const eventosParaNotificar = await obtenerEventosLocal(ownerIdActual);
       const idsParaNotificar = eventosParaNotificar.map((e) => e.id);
       const excepcionesParaNotificar = await obtenerExcepcionesLocal(idsParaNotificar);
       reprogramarTodasLasNotificaciones(eventosParaNotificar, excepcionesParaNotificar);
     }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga datos locales después de cada ciclo de sync
+    recargarTrasSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerId]);
+  }, [syncTick, ownerId]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- dispara el motor de sync al montar
-    sincronizar();
-  }, [sincronizar]);
-
-  useEffect(() => {
-    window.addEventListener('online', sincronizar);
-    return () => window.removeEventListener('online', sincronizar);
-  }, [sincronizar]);
 
   useEffect(() => {
     solicitarPermisoNotificaciones();
@@ -269,6 +253,7 @@ export default function CalendarioPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <SyncStatusButton />
             <ConflictosBadge
               onResuelto={() => {
                 cargarEventos();

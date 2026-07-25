@@ -14,7 +14,7 @@ Luego en Android Studio: Build → Generate Signed Bundle/APK, mismo keystore qu
 (así Android lo reconoce como "actualización" y no pierdes los datos locales — 
 aunque igual no importa mucho porque tus datos reales viven en Supabase, Dexie es solo caché).
 
-
+Generalmente el APK se guarda en: C:\dev\nuestro-calendario\android\app\release
 
 
 -- RECOMENDACIONES --
@@ -24,3 +24,13 @@ y en Chrome de tu computadora ve a chrome://inspect. Ahí debería aparecer tu a
 inspeccionable — ábrela y mira la consola. Si ves errores de red o CORS ahí, esa consola te va a 
 decir exactamente qué está fallando la próxima vez. Es la herramienta más útil que tienes para 
 depurar la app instalada, mucho más rápido que reconstruir el .apk a cada rato para adivinar.
+
+
+-- En caso de modificar el sonido de notificación --
+Al desinstalar la app, Android borra todos sus datos, incluyendo los canales de notificación que 
+había creado. Al reinstalar, tu código vuelve a llamar a createChannel() con el 
+id eventos-nuestro-calendario-v2, y como ya no existe (se borró junto con la app), 
+Android lo crea de cero con tu sonido personalizado desde el principio. 
+Por eso funcionó bien esta vez. La regla que importa recordar: si en el futuro cambias el 
+sonido sin desinstalar la app antes, ahí sí tienes que subir el número de versión del canal 
+(-v3, -v4...) porque Android ignora cambios de sonido en un canal que ya existe.

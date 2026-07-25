@@ -54,6 +54,15 @@ export default function PerfilMenu() {
             Ciclo menstrual
           </Link>
           
+          <Link
+            href="/vincular"
+            onClick={() => setAbierto(false)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <span className="text-base">🔗</span>
+            Compartir calendario
+          </Link>
+
           <button
             onClick={handleCerrarSesion}
             className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-500 hover:bg-red-50"
