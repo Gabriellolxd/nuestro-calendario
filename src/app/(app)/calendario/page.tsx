@@ -34,6 +34,12 @@ import { calcularFaseDia, ICONOS_FASE, NOMBRES_FASE, type FaseDia } from '@/lib/
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import { solicitarPermisoNotificaciones, reprogramarTodasLasNotificaciones } from '@/lib/notifications';
 import SyncStatusButton from '@/components/SyncStatusButton';
+import DecorationLayer from '@/components/DecorationLayer';
+import StickerLibraryModal from '@/components/StickerLibraryModal';
+import { obtenerStickersLocal, colocarStickerLocal, subirStickersPendientes, descargarStickersDesdeNube } from '@/lib/stickersLocal';
+import { crearNotaLocal, subirNotasPendientes, descargarNotasDesdeNube } from '@/lib/notesLocal';
+import type { StickerAssetLocal } from '@/lib/db';
+import StickerTray from '@/components/StickerTray';
 
 const MAX_CHIPS_MES = 4;
 
@@ -61,6 +67,14 @@ export default function CalendarioPage() {
   const [cycleLogs, setCycleLogs] = useState<CycleLogLocal[]>([]);
   const [prediccionCiclo, setPrediccionCiclo] = useState<CyclePredictionCacheLocal | undefined>(undefined);
   const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
+  const [arrastreTray, setArrastreTray] = useState<{ assetId: string; x: number; y: number } | null>(null);
+  
+  //Stickers y notas
+
+  const [modoDecorar, setModoDecorar] = useState(false);
+  const [mostrarLibreriaStickers, setMostrarLibreriaStickers] = useState(false);
+  const [stickerAssets, setStickerAssets] = useState<StickerAssetLocal[]>([]);
+  const [decoTick, setDecoTick] = useState(0);
 
   const diasMes = getMonthGrid(fechaAncla);
   const diasSemana = getWeekGrid(fechaAncla);
@@ -132,6 +146,13 @@ export default function CalendarioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncTick, ownerId]);
 
+  useEffect(() => {
+    if (!ownerId || !userId) return;
+    const ids = [userId, ownerId].filter((v, i, arr) => arr.indexOf(v) === i);
+    obtenerStickersLocal(ids).then(setStickerAssets);
+    descargarStickersDesdeNube(ids, ownerId);
+    descargarNotasDesdeNube(ownerId);
+  }, [userId, ownerId, syncTick]);
 
   useEffect(() => {
     solicitarPermisoNotificaciones();
@@ -290,17 +311,32 @@ export default function CalendarioPage() {
         <SelectorCalendario />
       </div>
 
-      {vista === 'mes' && (
-        <VistaMes
-          dias={diasMes}
-          mesActual={fechaAncla}
-          diaResaltado={diaSeleccionadoUsuario}
-          ocurrencias={ocurrencias}
-          fasePorDia={obtenerFasePorFecha}
-          onCrear={abrirModalParaCrear}
-          onEditar={abrirModalParaEditar}
-          onDetalle={abrirDetalle}
-        />
+      {vista === 'mes' && ownerId && (
+        <div className="relative">
+          <VistaMes
+            dias={diasMes}
+            mesActual={fechaAncla}
+            diaResaltado={diaSeleccionadoUsuario}
+            ocurrencias={ocurrencias}
+            fasePorDia={obtenerFasePorFecha}
+            onCrear={modoDecorar ? () => {} : abrirModalParaCrear}
+            onEditar={abrirModalParaEditar}
+            onDetalle={abrirDetalle}
+          />
+          <DecorationLayer
+            calendarioOwnerId={ownerId}
+            colocadoPorUserId={userId!}
+            targetMes={format(fechaAncla, 'yyyy-MM')}
+            editable={modoDecorar && !esEspectador}
+            stickerAssets={stickerAssets}
+            refreshTick={decoTick}
+            arrastreDesdeTray={arrastreTray}
+            onArrastreDesdeTrayTerminado={() => {
+              setArrastreTray(null);
+              setDecoTick((t) => t + 1);
+            }}
+          />
+        </div>
       )}
 
       {vista === 'semana' && (
@@ -333,6 +369,65 @@ export default function CalendarioPage() {
         >
           +
         </button>
+      )}
+
+      {!esEspectador && vista === 'mes' && (
+        <button
+          onClick={() => setModoDecorar((v) => !v)}
+          className={`fixed bottom-24 right-6 flex h-12 w-12 items-center justify-center rounded-full text-xl shadow-lg ${
+            modoDecorar ? 'bg-purple-500 text-white' : 'bg-white text-purple-500 border border-purple-200'
+          }`}
+          aria-label="Modo decorar"
+        >
+          🎨
+        </button>
+      )}
+
+      {modoDecorar && !esEspectador && (
+        <>
+          <button
+            onClick={async () => {
+              if (!userId || !ownerId) return;
+              await crearNotaLocal({
+                calendarioOwnerId: ownerId,
+                colocadoPorUserId: userId,
+                targetType: 'mes',
+                targetMes: format(fechaAncla, 'yyyy-MM'),
+              });
+              setDecoTick((t) => t + 1);
+              subirNotasPendientes().catch((err) => console.error(err));
+            }}
+            className="fixed bottom-24 left-6 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-xl shadow-lg"
+            aria-label="Agregar nota"
+          >
+            📝
+          </button>
+          <StickerTray
+            stickers={stickerAssets}
+            onAbrirLibreria={() => setMostrarLibreriaStickers(true)}
+            onIniciarArrastreDesdeTray={(assetId, x, y) => setArrastreTray({ assetId, x, y })}
+          />
+        </>
+      )}
+
+      {mostrarLibreriaStickers && userId && ownerId && (
+        <StickerLibraryModal
+          userId={userId}
+          idsCalendariosVisibles={[userId, ownerId].filter((v, i, arr) => arr.indexOf(v) === i)}
+          onClose={() => setMostrarLibreriaStickers(false)}
+          onElegirParaColocar={async (assetId) => {
+            await colocarStickerLocal({
+              calendarioOwnerId: ownerId,
+              colocadoPorUserId: userId,
+              stickerAssetId: assetId,
+              targetType: 'mes',
+              targetMes: format(fechaAncla, 'yyyy-MM'),
+            });
+            setDecoTick((t) => t + 1);
+            subirStickersPendientes().catch((err) => console.error(err));
+            setMostrarLibreriaStickers(false);
+          }}
+        />
       )}
 
       {detalleDia && (
