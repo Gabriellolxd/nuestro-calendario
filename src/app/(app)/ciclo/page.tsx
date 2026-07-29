@@ -20,6 +20,7 @@ import { calcularFaseDia, ICONOS_FASE, NOMBRES_FASE, type FaseDia, type CycleLog
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import CicloDiaModal from '@/components/CicloDiaModal';
 import SyncStatusButton from '@/components/SyncStatusButton';
+import PantallaCarga from '@/components/PantallaCarga';
 
 function fechaAISO(dia: Date): string {
   return format(dia, 'yyyy-MM-dd');
@@ -140,7 +141,7 @@ export default function CicloPage() {
   }
 
   if (cargandoContexto || !ownerId) {
-    return <p className="p-8 text-center text-gray-400">Cargando...</p>;
+    return <PantallaCarga />;
   }
 
   const dias = getMonthGrid(fechaAncla);

@@ -40,6 +40,7 @@ import { obtenerStickersLocal, colocarStickerLocal, subirStickersPendientes, des
 import { crearNotaLocal, subirNotasPendientes, descargarNotasDesdeNube } from '@/lib/notesLocal';
 import type { StickerAssetLocal } from '@/lib/db';
 import StickerTray from '@/components/StickerTray';
+import PantallaCarga from '@/components/PantallaCarga';
 
 const MAX_CHIPS_MES = 4;
 
@@ -248,7 +249,7 @@ export default function CalendarioPage() {
   }
 
   if (cargandoContexto || !userId || !ownerId) {
-    return <p className="p-8 text-center text-gray-400">Cargando...</p>;
+    return <PantallaCarga />;
   }
 
   return (
@@ -327,7 +328,7 @@ export default function CalendarioPage() {
             calendarioOwnerId={ownerId}
             colocadoPorUserId={userId!}
             targetMes={format(fechaAncla, 'yyyy-MM')}
-            editable={modoDecorar && !esEspectador}
+            editable={!esEspectador}
             stickerAssets={stickerAssets}
             refreshTick={decoTick}
             arrastreDesdeTray={arrastreTray}
@@ -406,6 +407,7 @@ export default function CalendarioPage() {
             stickers={stickerAssets}
             onAbrirLibreria={() => setMostrarLibreriaStickers(true)}
             onIniciarArrastreDesdeTray={(assetId, x, y) => setArrastreTray({ assetId, x, y })}
+            onCerrar={() => setModoDecorar(false)}
           />
         </>
       )}

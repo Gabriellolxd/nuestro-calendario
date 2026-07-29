@@ -11,9 +11,10 @@ type Props = {
   stickers: StickerAssetLocal[];
   onAbrirLibreria: () => void;
   onIniciarArrastreDesdeTray: (assetId: string, clientX: number, clientY: number) => void;
+  onCerrar: () => void;
 };
 
-export default function StickerTray({ stickers, onAbrirLibreria, onIniciarArrastreDesdeTray }: Props) {
+export default function StickerTray({ stickers, onAbrirLibreria, onIniciarArrastreDesdeTray, onCerrar }: Props) {
   const [pagina, setPagina] = useState(0);
   const totalPaginas = Math.max(1, Math.ceil(stickers.length / POR_PAGINA));
   const visibles = stickers.slice(pagina * POR_PAGINA, pagina * POR_PAGINA + POR_PAGINA);
@@ -31,13 +32,22 @@ export default function StickerTray({ stickers, onAbrirLibreria, onIniciarArrast
         <span className="text-[11px] text-gray-400">
           Arrastra un sticker al calendario · pág. {pagina + 1}/{totalPaginas}
         </span>
-        <button
-          onClick={() => setPagina((p) => Math.min(totalPaginas - 1, p + 1))}
-          disabled={pagina >= totalPaginas - 1}
-          className="px-2 text-gray-400 disabled:opacity-20"
-        >
-          ›
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setPagina((p) => Math.min(totalPaginas - 1, p + 1))}
+            disabled={pagina >= totalPaginas - 1}
+            className="px-2 text-gray-400 disabled:opacity-20"
+          >
+            ›
+          </button>
+          <button
+            onClick={onCerrar}
+            className="ml-1 flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs text-gray-500 hover:bg-gray-200"
+            aria-label="Cerrar bandeja de stickers"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div key={pagina} className="grid animate-[pageTurn_0.2s_ease-out] grid-cols-6 gap-2">
