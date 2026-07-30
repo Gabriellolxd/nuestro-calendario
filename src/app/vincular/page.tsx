@@ -3,6 +3,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ChevronLeft, Link2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export default function VincularPage() {
@@ -12,6 +14,7 @@ export default function VincularPage() {
   const [mensaje, setMensaje] = useState('');
   const [cargando, setCargando] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     async function cargarPerfil() {
@@ -71,15 +74,58 @@ export default function VincularPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
-        <h1 className="mb-2 text-center text-2xl font-semibold text-gray-800">Comparte tu calendario</h1>
-        <p className="mb-6 text-center text-sm text-gray-500">
-          Para compartir tu calendario, copia el código de tu pareja y pégalo aquí.
-        </p>
-        <p className="mb-6 text-center text-sm text-gray-750">
-          Tu código: <span className="font-mono font-semibold text-pink-500">{miCodigo || '...'}</span>
-        </p>
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] px-4 py-10 textura-cozy">
+      <div className="panel-madera w-full max-w-sm animar-entrada p-8">
+        <div className="mb-4 flex items-center gap-3">
+          <button
+            onClick={() => router.push('/calendario')}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface)]"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <h2 className="font-display text-[var(--color-text)]">
+            Volver
+          </h2>
+        </div>
+        <div className="insignia-icono mx-auto mb-3 h-12 w-12">
+          <Link2 size={20} className="text-[var(--color-primary)]" strokeWidth={2.2} />
+        </div>
+        <h1 className="font-display text-center text-2xl font-semibold text-[var(--color-text)]">
+          Comparte tu calendario
+        </h1>
+
+        {/* Notitas manuales en vez del párrafo explicativo */}
+        <div className="my-8 flex items-center justify-center gap-8 py-2">
+          <div
+            className="w-40 -rotate-5 rounded-lg border-2 border-[var(--color-border)] bg-[var(--color-gold-soft)] p-2 text-center"
+            style={{ boxShadow: 'var(--sombra-panel-suave)' }}
+          >
+            <p className="font-hand text-[17px] leading-tight text-[var(--color-wood-dark)]">
+              <strong>¿Quieres compartir tu calendario?</strong> 
+            </p>
+            <p className="font-hand text-[17px] leading-tight text-[var(--color-wood-dark)]">
+              ¡Pega aquí el código de esa persona!
+            </p>
+          </div>
+          <div
+            className="w-40 rotate-5 rounded-lg border-2 border-[var(--color-border)] bg-[var(--color-sage-soft)] p-2 text-center"
+            style={{ boxShadow: 'var(--sombra-panel-suave)' }}
+          >
+            <p className="font-hand text-[17px] leading-tight text-[var(--color-wood-dark)]">
+              <strong>¿Quieres ver otro calendario?</strong>  
+            </p>
+            <p className="font-hand text-[17px] leading-tight text-[var(--color-wood-dark)]">
+              ¡Mándale tu código a esa persona!
+            </p>
+          </div>
+        </div>
+
+        <div className="placa mx-auto mb-6 flex w-fit items-center gap-2 px-4 py-2">
+          <span className="text-xs text-[var(--color-text-inverse)]/70">Tu código</span>
+          <span className="font-display font-mono text-sm font-bold tracking-wider">
+            {miCodigo || '...'}
+          </span>
+        </div>
 
         <form onSubmit={handleVincular} className="space-y-4">
           <input
@@ -88,26 +134,52 @@ export default function VincularPage() {
             value={codigoInput}
             onChange={(e) => setCodigoInput(e.target.value)}
             required
-            className="w-full rounded-lg border border-gray-300 px-4 py-2 uppercase focus:outline-none focus:ring-2 focus:ring-pink-400"
+            className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-2.5 uppercase text-[var(--color-text)] outline-none transition-colors placeholder:normal-case placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)]"
           />
 
-          <div className="flex gap-4 text-sm text-gray-600">
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={rol === 'editor'} onChange={() => setRol('editor')} />
-              Editor (puede modificar)
+          <div className="flex gap-2">
+            <label
+              className={`cinta flex-1 cursor-pointer px-3 py-2 text-center text-xs font-semibold transition-colors ${
+                rol === 'editor'
+                  ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
+                  : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'
+              }`}
+            >
+              <input
+                type="radio"
+                className="sr-only"
+                checked={rol === 'editor'}
+                onChange={() => setRol('editor')}
+              />
+              Editor
             </label>
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={rol === 'espectador'} onChange={() => setRol('espectador')} />
-              Espectador (solo ve)
+            <label
+              className={`cinta flex-1 cursor-pointer px-3 py-2 text-center text-xs font-semibold transition-colors ${
+                rol === 'espectador'
+                  ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
+                  : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'
+              }`}
+            >
+              <input
+                type="radio"
+                className="sr-only"
+                checked={rol === 'espectador'}
+                onChange={() => setRol('espectador')}
+              />
+              Espectador
             </label>
           </div>
 
-          {mensaje && <p className="text-sm text-gray-700">{mensaje}</p>}
+          {mensaje && (
+            <p className="rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-center text-sm text-[var(--color-text)]">
+              {mensaje}
+            </p>
+          )}
 
           <button
             type="submit"
             disabled={cargando}
-            className="w-full rounded-lg bg-pink-500 py-2 font-medium text-white transition hover:bg-pink-600 disabled:opacity-50"
+            className="boton-tallado w-full rounded-xl bg-[var(--color-primary)] py-2.5 font-semibold text-[var(--color-text-inverse)] transition-colors hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
           >
             {cargando ? 'Vinculando...' : 'Vincular'}
           </button>

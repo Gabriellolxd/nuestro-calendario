@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Mail, Lock, Coffee } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { ensureDeviceRegistered } from '@/lib/device';
 import { setPreferenciaRecordarme } from '@/lib/supabase';
@@ -50,46 +51,65 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
-        <h1 className="mb-6 text-center text-2xl font-semibold text-gray-800">
-          {modo === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] px-4 textura-cozy">
+      <div className="panel-madera w-full max-w-sm animar-entrada p-8">
+        <div className="insignia-icono mx-auto mb-3 h-12 w-12">
+          <Coffee size={22} className="text-[var(--color-primary)]" strokeWidth={2.2} />
+        </div>
+
+        <h1 className="font-display text-center text-2xl font-semibold text-[var(--color-text)]">
+          {modo === 'login' ? '¡Bienvenida!' : 'Crea tu cuenta'}
         </h1>
+        <p className="font-hand mb-6 -mt-0.5 text-center text-lg text-[var(--color-text-muted)]">
+          {modo === 'login' ? 'qué bueno verte por aquí' : 'empecemos con lo tuyo'}
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="email"
-            placeholder="Correo"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400"
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-            className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-pink-400"
-          />
+          <div className="relative">
+            <Mail size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+            <input
+              type="email"
+              placeholder="Correo"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] py-2.5 pl-10 pr-4 text-[var(--color-text)] outline-none transition-colors placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)]"
+            />
+          </div>
 
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="relative">
+            <Lock size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+            <input
+              type="password"
+              placeholder="Contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] py-2.5 pl-10 pr-4 text-[var(--color-text)] outline-none transition-colors placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)]"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
             <input
               type="checkbox"
               checked={recordarme}
               onChange={(e) => setRecordarme(e.target.checked)}
+              className="h-4 w-4 rounded accent-[var(--color-primary)]"
             />
             Recordar mi sesión en este dispositivo
           </label>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && (
+            <p className="rounded-lg border-2 border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+              {error}
+            </p>
+          )}
 
           <button
             type="submit"
             disabled={cargando}
-            className="w-full rounded-lg bg-pink-500 py-2 font-medium text-white transition hover:bg-pink-600 disabled:opacity-50"
+            className="boton-tallado w-full rounded-xl bg-[var(--color-primary)] py-2.5 font-semibold text-[var(--color-text-inverse)] transition-colors hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
           >
             {cargando ? 'Cargando...' : modo === 'login' ? 'Entrar' : 'Registrarme'}
           </button>
@@ -97,7 +117,7 @@ export default function LoginPage() {
 
         <button
           onClick={() => setModo(modo === 'login' ? 'registro' : 'login')}
-          className="mt-4 w-full text-center text-sm text-gray-500 hover:underline"
+          className="mt-4 w-full text-center text-sm font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-primary)]"
         >
           {modo === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión'}
         </button>
