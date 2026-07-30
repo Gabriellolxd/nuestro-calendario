@@ -4,8 +4,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { LogOut, Link2, Droplet } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import ThemeSwitcher from './ThemeSwitcher';
 
 export default function PerfilMenu() {
   const [abierto, setAbierto] = useState(false);
@@ -31,7 +33,7 @@ export default function PerfilMenu() {
     <div className="relative" ref={contenedorRef}>
       <button
         onClick={() => setAbierto((a) => !a)}
-        className="h-9 w-9 overflow-hidden rounded-full ring-2 ring-white shadow-sm transition-transform active:scale-95"
+        className="h-9 w-9 overflow-hidden rounded-full ring-2 ring-[var(--color-gold)] shadow-sm transition-transform active:scale-95"
         aria-label="Menú de perfil"
       >
         <Image
@@ -44,36 +46,34 @@ export default function PerfilMenu() {
       </button>
 
       {abierto && (
-        <div className="absolute right-0 top-11 z-50 w-48 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-black/5">
+        <div className="absolute right-0 top-11 z-50 w-56 animar-entrada overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] py-1 shadow-[var(--shadow-cozy-lg)]">
           <Link
             href="/ciclo"
             onClick={() => setAbierto(false)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface)]"
           >
-            <span className="text-base">🩸</span>
+            <Droplet size={16} className="text-[var(--color-primary)]" />
             Ciclo menstrual
           </Link>
-          
+
           <Link
             href="/vincular"
             onClick={() => setAbierto(false)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface)]"
           >
-            <span className="text-base">🔗</span>
+            <Link2 size={16} className="text-[var(--color-primary)]" />
             Compartir calendario
           </Link>
 
+          <div className="my-1 border-t border-[var(--color-border)]" />
+          <ThemeSwitcher />
+          <div className="my-1 border-t border-[var(--color-border)]" />
+
           <button
             onClick={handleCerrarSesion}
-            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-500 hover:bg-red-50"
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-[var(--color-danger)] transition-colors hover:bg-[var(--color-primary-soft)]"
           >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              />
-            </svg>
+            <LogOut size={16} />
             Cerrar sesión
           </button>
         </div>

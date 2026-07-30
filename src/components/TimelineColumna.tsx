@@ -9,15 +9,11 @@ import { construirSegmentos } from '@/lib/blocks';
 
 const ALTURA_HORA = 56;
 const ALTURA_TOTAL = ALTURA_HORA * 24;
-const ALTURA_MINIMA_TITULO = 16; // debajo de esto no cabe texto legible
-
-// Cada cuánto se refresca la línea de "hora actual" (ms)
+const ALTURA_MINIMA_TITULO = 16;
 const INTERVALO_ACTUALIZACION_MS = 30_000;
 
 type Props = {
   ocurrencias: Ocurrencia[];
-  // Indica si esta columna corresponde al día de hoy: solo entonces
-  // se dibuja la línea de hora actual.
   esHoy: boolean;
   onSeleccionar: (oc: Ocurrencia) => void;
   onDetalle: (ocurrencias: Ocurrencia[]) => void;
@@ -31,21 +27,18 @@ function minutosDesdeMedianoche(ms: number): number {
 
 export default function TimelineColumna({ ocurrencias, esHoy, onSeleccionar, onDetalle, onCrearHora }: Props) {
   const segmentos = construirSegmentos(ocurrencias);
-
-  // Hora actual en la zona horaria de Ecuador (America/Guayaquil),
-  // independientemente de en qué zona horaria esté el dispositivo del usuario.
-  const [ahoraEcuador, setAhoraEcuador] = useState(() => toZonedTime(new Date(), APP_TIMEZONE));
+  const [ahoraEc, setAhoraEc] = useState(() => toZonedTime(new Date(), APP_TIMEZONE));
 
   useEffect(() => {
     if (!esHoy) return;
     const intervalo = setInterval(() => {
-      setAhoraEcuador(toZonedTime(new Date(), APP_TIMEZONE));
+      setAhoraEc(toZonedTime(new Date(), APP_TIMEZONE));
     }, INTERVALO_ACTUALIZACION_MS);
     return () => clearInterval(intervalo);
   }, [esHoy]);
 
   const topHoraActual = esHoy
-    ? ((ahoraEcuador.getHours() * 60 + ahoraEcuador.getMinutes()) / 60) * ALTURA_HORA
+    ? ((ahoraEc.getHours() * 60 + ahoraEc.getMinutes()) / 60) * ALTURA_HORA
     : null;
 
   function manejarClickFondo(e: React.MouseEvent<HTMLDivElement>) {
@@ -57,14 +50,14 @@ export default function TimelineColumna({ ocurrencias, esHoy, onSeleccionar, onD
 
   return (
     <div
-      className="relative cursor-pointer border-l border-gray-100"
+      className="relative cursor-pointer border-l border-[var(--color-border)]/60"
       style={{ height: ALTURA_TOTAL }}
       onClick={manejarClickFondo}
     >
       {Array.from({ length: 24 }, (_, h) => (
         <div
           key={h}
-          className="pointer-events-none absolute left-0 right-0 border-t border-gray-100"
+          className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-[var(--color-border)]/50"
           style={{ top: h * ALTURA_HORA }}
         />
       ))}
@@ -82,7 +75,7 @@ export default function TimelineColumna({ ocurrencias, esHoy, onSeleccionar, onD
               e.stopPropagation();
               soloUno ? onSeleccionar(seg.ocurrencias[0]) : onDetalle(seg.ocurrencias);
             }}
-            className="absolute left-1 right-1 flex cursor-pointer items-center justify-between overflow-hidden rounded-sm px-1.5 text-[10px] font-medium text-white shadow-sm"
+            className="absolute left-1 right-1 flex cursor-pointer items-center justify-between overflow-hidden rounded-lg border border-black/10 px-1.5 text-[10px] font-semibold text-white shadow-[0_2px_0_rgba(0,0,0,0.15)]"
             style={{ top, height: altura, backgroundColor: seg.color }}
           >
             {altura >= ALTURA_MINIMA_TITULO && (
@@ -99,14 +92,16 @@ export default function TimelineColumna({ ocurrencias, esHoy, onSeleccionar, onD
         );
       })}
 
-      {/* Línea de hora actual en tiempo real (solo en la columna de hoy) */}
       {esHoy && topHoraActual !== null && (
         <div
           className="pointer-events-none absolute left-0 right-0 z-10 flex items-center"
           style={{ top: topHoraActual }}
         >
-          <div className="-ml-[3px] h-[7px] w-[7px] flex-shrink-0 rounded-full bg-red-500" />
-          <div className="h-[2px] flex-1 bg-red-500" />
+          <div
+            className="-ml-[4px] h-[9px] w-[9px] flex-shrink-0 rounded-full border-2 border-[var(--color-bg-elevated)]"
+            style={{ backgroundColor: 'var(--color-primary)' }}
+          />
+          <div className="h-[2px] flex-1" style={{ backgroundColor: 'var(--color-primary)' }} />
         </div>
       )}
     </div>

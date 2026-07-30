@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { ChevronLeft, ChevronRight, Droplet, Sparkles, Egg, CalendarHeart } from 'lucide-react';
 import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
 import { getDeviceId } from '@/lib/device';
 import {
@@ -19,7 +20,6 @@ import { addMonths, subMonths } from 'date-fns';
 import { calcularFaseDia, ICONOS_FASE, NOMBRES_FASE, type FaseDia, type CycleLogInput } from '@/lib/cyclePrediction';
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import CicloDiaModal from '@/components/CicloDiaModal';
-import SyncStatusButton from '@/components/SyncStatusButton';
 import PantallaCarga from '@/components/PantallaCarga';
 
 function fechaAISO(dia: Date): string {
@@ -31,7 +31,7 @@ function fechaLegible(iso: string, patron = 'd MMM yyyy'): string {
 }
 
 export default function CicloPage() {
-  const { calendarioActivo, cargando: cargandoContexto, syncTick } = useCalendarioActivo();
+  const { calendarioActivo, cargando: cargandoContexto } = useCalendarioActivo();
   const ownerId = calendarioActivo?.ownerId ?? null;
   const esEspectador = calendarioActivo?.rol === 'espectador';
   const router = useRouter();
@@ -52,6 +52,7 @@ export default function CicloPage() {
     setPrediccion(cache);
   }, [ownerId]);
 
+  const { syncTick } = useCalendarioActivo();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial y tras cada ciclo de sync
@@ -147,90 +148,120 @@ export default function CicloPage() {
   const dias = getMonthGrid(fechaAncla);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      <div className="sticky top-0 z-40 bg-white shadow-sm">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={() => router.push('/calendario')} className="rounded-full px-2 py-1 text-gray-500 hover:bg-gray-100">
-            ←
+    <div className="min-h-screen bg-[var(--color-bg)] pb-24 textura-cozy">
+      <div className="sticky top-0 z-40 border-b-[3px] border-[var(--color-wood-dark)] bg-[var(--color-bg-elevated)]">
+        <div className="flex items-center gap-3 px-4 py-2">
+          <button
+            onClick={() => router.push('/calendario')}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-[var(--color-surface)]"
+          >
+            <ChevronLeft size={18} />
           </button>
-          <h1 className="flex-1 text-base font-semibold text-gray-800">
-            🩸 Ciclo menstrual {calendarioActivo?.rol !== 'propio' && `— ${calendarioActivo?.label}`}
+          <h1 className="font-display flex flex-1 items-center gap-1.5 text-base font-semibold text-[var(--color-text)]">
+            <Droplet size={16} className="text-[var(--color-primary)]" />
+            Ciclo {calendarioActivo?.rol !== 'propio' && `— ${calendarioActivo?.label}`}
           </h1>
-          <SyncStatusButton />
         </div>
-        <div className="flex items-center justify-between px-4 pb-2">
-          <button onClick={() => setFechaAncla((f) => subMonths(f, 1))} className="rounded-full px-3 py-1 text-gray-500 hover:bg-gray-100">
-            ←
-          </button>
-          <span className="text-sm font-semibold capitalize text-gray-800">{format(fechaAncla, 'MMMM yyyy', { locale: es })}</span>
-          <button onClick={() => setFechaAncla((f) => addMonths(f, 1))} className="rounded-full px-3 py-1 text-gray-500 hover:bg-gray-100">
-            →
-          </button>
+
+        <div className="relative flex items-center justify-center px-4 pb-3">
+          <div className="placa flex items-center gap-2 px-2 py-1.5">
+            <button
+              onClick={() => setFechaAncla((f) => subMonths(f, 1))}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--color-text-inverse)]/80 hover:text-[var(--color-text-inverse)]"
+            >
+              <ChevronLeft size={16} strokeWidth={3} />
+            </button>
+            <span className="font-display px-1 text-sm font-semibold capitalize tracking-wide">
+              {format(fechaAncla, 'MMMM yyyy', { locale: es })}
+            </span>
+            <button
+              onClick={() => setFechaAncla((f) => addMonths(f, 1))}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--color-text-inverse)]/80 hover:text-[var(--color-text-inverse)]"
+            >
+              <ChevronRight size={16} strokeWidth={3} />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-md px-4 py-3">
+      <div className="mx-auto max-w-md px-3 py-3">
         {esEspectador && (
-          <p className="mb-3 rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-500">
-            👁️ Modo solo lectura — no puedes marcar ni editar días de este calendario.
+          <p className="mb-3 rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+            👁 Modo solo lectura — no puedes marcar ni editar días de este calendario.
           </p>
         )}
 
         {prediccion ? (
-          <div className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
-            <p className="mb-3 text-sm font-semibold text-gray-700">Predicción actual</p>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-[11px] text-gray-400">Próximo periodo</p>
-                <p className="font-medium text-pink-600">{fechaLegible(prediccion.next_period_predicted, 'd MMM')}</p>
+          <div className="panel-madera mb-4 p-4">
+            <p className="font-hand mb-2 text-lg font-bold text-[var(--color-text-muted)]">Predicción actual</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-[var(--color-primary-soft)] p-2.5">
+                <p className="mb-0.5 flex items-center gap-1 text-[10px] font-medium text-[var(--color-wood-dark)]">
+                  <Droplet size={11} /> Próximo periodo
+                </p>
+                <p className="font-display text-sm font-bold text-[var(--color-primary)]">
+                  {fechaLegible(prediccion.next_period_predicted, 'd MMM')}
+                </p>
               </div>
-              <div>
-                <p className="text-[11px] text-gray-400">Ovulación estimada</p>
-                <p className="font-medium text-amber-600">{fechaLegible(prediccion.ovulation_predicted, 'd MMM')}</p>
+              <div className="rounded-xl bg-[var(--color-gold-soft)] p-2.5">
+                <p className="mb-0.5 flex items-center gap-1 text-[10px] font-medium text-[var(--color-wood-dark)]">
+                  <Egg size={11} /> Ovulación
+                </p>
+                <p className="font-display text-sm font-bold text-[var(--color-wood-dark)]">
+                  {fechaLegible(prediccion.ovulation_predicted, 'd MMM')}
+                </p>
               </div>
-              <div>
-                <p className="text-[11px] text-gray-400">Duración promedio</p>
-                <p className="font-medium text-gray-700">{Math.round(prediccion.avg_cycle_length)} días</p>
+              <div className="rounded-xl bg-[var(--color-surface)] p-2.5">
+                <p className="mb-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">Duración promedio</p>
+                <p className="font-display text-sm font-bold text-[var(--color-text)]">
+                  {Math.round(prediccion.avg_cycle_length)} días
+                </p>
               </div>
-              <div>
-                <p className="text-[11px] text-gray-400">Ventana fértil</p>
-                <p className="font-medium text-gray-700">
+              <div className="rounded-xl bg-[var(--color-sage-soft)] p-2.5">
+                <p className="mb-0.5 flex items-center gap-1 text-[10px] font-medium text-[var(--color-wood-dark)]">
+                  <CalendarHeart size={11} /> Ventana fértil
+                </p>
+                <p className="font-display text-xs font-bold text-[var(--color-wood-dark)]">
                   {fechaLegible(prediccion.fertile_window_start, 'd MMM')} – {fechaLegible(prediccion.fertile_window_end, 'd MMM')}
                 </p>
               </div>
             </div>
             {prediccion.es_estimado && (
-              <p className="mt-3 rounded-lg bg-blue-50 px-2 py-1.5 text-[11px] text-blue-700">
-                📊 Estimado con un promedio general — marca un periodo más para calcularlo con tus propios datos.
+              <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-[var(--color-surface)] px-2.5 py-1.5 text-[11px] text-[var(--color-text-muted)]">
+                <Sparkles size={12} />
+                Estimado con un promedio general — marca un periodo más para calcularlo con tus propios datos.
               </p>
             )}
             {prediccion.ventana_ensanchada && (
-              <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">
+              <p className="mt-2 rounded-lg bg-[var(--color-gold-soft)] px-2.5 py-1.5 text-[11px] text-[var(--color-wood-dark)]">
                 Ciclo irregular detectado — la ventana fértil se ensanchó automáticamente.
               </p>
             )}
           </div>
         ) : (
-          <div className="mb-4 rounded-2xl bg-white p-4 text-center shadow-sm">
-            <p className="text-sm text-gray-500">Toca el primer día de tu periodo en el calendario para empezar.</p>
+          <div className="panel-madera mb-4 p-6 text-center">
+            <Droplet size={28} className="mx-auto mb-2 text-[var(--color-primary-soft)]" />
+            <p className="font-hand text-lg text-[var(--color-text-muted)]">
+              Toca el primer día de tu periodo en el calendario para empezar.
+            </p>
           </div>
         )}
 
-        <div className="rounded-2xl bg-white p-3 shadow-sm">
-          <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-medium text-gray-400">
+        <div className="panel-madera overflow-hidden">
+          <div className="grid grid-cols-7 border-b-2 border-[var(--color-border)] bg-[var(--color-surface)] text-center text-[10px] font-bold uppercase text-[var(--color-wood-dark)]">
             {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
-              <div key={i}>{d}</div>
+              <div key={i} className="py-1.5">{d}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-1 p-2">
             {dias.map((dia) => {
               const dentroDelMes = isSameMonth(dia, fechaAncla);
               const esHoy = isSameDay(dia, ahoraEcuador());
               const logDia = logExistenteEnDia(dia);
               const fase = fasePorDia(dia);
 
-              let claseCirculo = 'text-gray-700 hover:bg-gray-100';
-              if (logDia) claseCirculo = 'bg-pink-500 text-white font-semibold';
+              let claseCirculo = 'text-[var(--color-text)] hover:bg-[var(--color-surface)]';
+              if (logDia) claseCirculo = 'bg-[var(--color-primary)] text-[var(--color-text-inverse)] font-bold shadow-[0_2px_0_var(--color-primary-hover)]';
 
               return (
                 <button
@@ -238,9 +269,9 @@ export default function CicloPage() {
                   onClick={() => handleClickDia(dia)}
                   disabled={esEspectador}
                   title={fase ? NOMBRES_FASE[fase.fase] : undefined}
-                  className={`relative flex aspect-square flex-col items-center justify-center rounded-full text-xs transition-colors ${
+                  className={`relative flex aspect-square flex-col items-center justify-center rounded-full text-xs transition-transform active:scale-90 ${
                     dentroDelMes ? '' : 'opacity-30'
-                  } ${esHoy && !logDia ? 'ring-2 ring-pink-400' : ''} ${claseCirculo}`}
+                  } ${esHoy && !logDia ? 'ring-2 ring-[var(--color-gold)]' : ''} ${claseCirculo}`}
                 >
                   <span>{format(dia, 'd')}</span>
                   {!logDia && fase && <span className="absolute -bottom-0.5 text-[9px]">{ICONOS_FASE[fase.fase]}</span>}
@@ -248,7 +279,7 @@ export default function CicloPage() {
               );
             })}
           </div>
-          <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-gray-500">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 border-t-2 border-dashed border-[var(--color-border)] px-3 py-2.5 text-[10px] text-[var(--color-text-muted)]">
             <span>🩸 Registrado</span>
             <span>{ICONOS_FASE.periodo_predicho} Predicho</span>
             <span>{ICONOS_FASE.ventana_fertil} Fértil</span>

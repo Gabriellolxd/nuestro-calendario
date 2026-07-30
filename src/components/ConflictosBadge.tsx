@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ConflictosModal from './ConflictosModal';
 
@@ -32,9 +33,10 @@ export default function ConflictosBadge({ onResuelto }: Props) {
     <>
       <button
         onClick={() => setAbierto(true)}
-        className="flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-200"
+        className="flex animar-entrada items-center gap-1 rounded-full bg-[var(--color-gold-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-wood-dark)] transition-colors hover:brightness-95"
       >
-        ⚠ {cantidad}
+        <TriangleAlert size={12} />
+        {cantidad}
       </button>
       {abierto && (
         <ConflictosModal

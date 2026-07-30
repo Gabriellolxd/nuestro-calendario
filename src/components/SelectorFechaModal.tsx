@@ -3,14 +3,13 @@
 
 import { useState } from 'react';
 import { addMonths, subMonths, startOfMonth, isSameWeek } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getMonthGrid, isSameMonth, isSameDay, format, es, ahoraEcuador } from '@/lib/dates';
 
 type Vista = 'mes' | 'semana' | 'dia';
 
 interface SelectorFechaModalProps {
   fechaSeleccionada: Date;
-  // Vista activa en el calendario: si es 'semana', se resalta con un
-  // fondo suave toda la semana que contiene la fecha, no solo el día.
   vista: Vista;
   onSeleccionar: (fecha: Date) => void;
   onCerrar: () => void;
@@ -22,12 +21,6 @@ export default function SelectorFechaModal({
   onSeleccionar,
   onCerrar,
 }: SelectorFechaModalProps) {
-  // Mes que se está mostrando dentro del selector (puede ser distinto
-  // al mes de la vista principal mientras el usuario navega).
-  // Como este componente se monta/desmonta cada vez que se abre/cierra
-  // el modal (ver page.tsx: `{mostrarSelectorFecha && <SelectorFechaModal .../>}`),
-  // no hace falta un useEffect para "sincronizar" esto: el estado inicial
-  // ya se recalcula solo en cada montaje.
   const [mesVisible, setMesVisible] = useState<Date>(() => startOfMonth(fechaSeleccionada));
 
   const dias = getMonthGrid(mesVisible);
@@ -48,36 +41,34 @@ export default function SelectorFechaModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-wood-dark)]/50 backdrop-blur-sm px-4"
       onClick={onCerrar}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xs rounded-2xl bg-white p-4 shadow-2xl animate-[fadeIn_0.15s_ease-out]"
+        className="panel-madera w-full max-w-xs animar-entrada p-4"
       >
-        {/* Encabezado: mes/año + flechas de navegación */}
-        <div className="mb-3 flex items-center justify-between">
+        <div className="placa mb-3 flex items-center justify-between px-2 py-1.5">
           <button
             onClick={irMesAnterior}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-pink-50 hover:text-pink-500"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-inverse)]/80 hover:text-[var(--color-text-inverse)]"
             aria-label="Mes anterior"
           >
-            ←
+            <ChevronLeft size={16} strokeWidth={3} />
           </button>
-          <span className="text-sm font-semibold capitalize text-gray-800">
+          <span className="font-display text-sm font-semibold capitalize tracking-wide text-[var(--color-text-inverse)]">
             {format(mesVisible, 'MMMM yyyy', { locale: es })}
           </span>
           <button
             onClick={irMesSiguiente}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-pink-50 hover:text-pink-500"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-inverse)]/80 hover:text-[var(--color-text-inverse)]"
             aria-label="Mes siguiente"
           >
-            →
+            <ChevronRight size={16} strokeWidth={3} />
           </button>
         </div>
 
-        {/* Nombres de los días */}
-        <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-medium text-gray-400">
+        <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-bold uppercase text-[var(--color-text-muted)]">
           {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
             <div key={`${d}-${i}`} className="py-1">
               {d}
@@ -85,15 +76,11 @@ export default function SelectorFechaModal({
           ))}
         </div>
 
-        {/* Grilla de días */}
         <div className="grid grid-cols-7 gap-y-1 text-center text-sm">
           {dias.map((dia) => {
             const dentroDelMes = isSameMonth(dia, mesVisible);
             const esHoy = isSameDay(dia, hoy);
             const esSeleccionado = isSameDay(dia, fechaSeleccionada);
-            // Si estamos en vista "semana", resaltamos con un fondo suave
-            // TODA la semana que contiene la fecha (porque elegir un día
-            // en esa vista en realidad activa toda su semana).
             const enSemanaSeleccionada =
               vista === 'semana' && isSameWeek(dia, fechaSeleccionada, { weekStartsOn: 1 });
 
@@ -105,15 +92,15 @@ export default function SelectorFechaModal({
                   onCerrar();
                 }}
                 className={[
-                  'mx-auto flex h-8 w-8 items-center justify-center transition-colors',
-                  !dentroDelMes ? 'text-gray-300' : 'text-gray-700',
+                  'mx-auto flex h-8 w-8 items-center justify-center font-semibold transition-colors',
+                  !dentroDelMes ? 'text-[var(--color-text-muted)] opacity-40' : 'text-[var(--color-text)]',
                   esSeleccionado
-                    ? 'rounded-full bg-pink-500 text-white font-semibold'
+                    ? 'rounded-full bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
                     : esHoy
-                    ? 'rounded-full border border-pink-400 text-pink-500 font-semibold'
+                    ? 'rounded-full border-2 border-[var(--color-primary)] text-[var(--color-primary)]'
                     : enSemanaSeleccionada
-                    ? 'rounded-md bg-pink-50 hover:bg-pink-100'
-                    : 'rounded-full hover:bg-pink-50',
+                    ? 'rounded-md bg-[var(--color-primary-soft)] hover:brightness-95'
+                    : 'rounded-full hover:bg-[var(--color-primary-soft)]',
                 ].join(' ')}
               >
                 {format(dia, 'd')}
@@ -122,13 +109,12 @@ export default function SelectorFechaModal({
           })}
         </div>
 
-        {/* Footer con acceso rápido a "Hoy" */}
-        <div className="mt-3 flex justify-center border-t border-gray-100 pt-3">
+        <div className="mt-3 flex justify-center border-t-2 border-dashed border-[var(--color-border)] pt-3">
           <button
             onClick={seleccionarHoy}
-            className="rounded-full px-4 py-1 text-xs font-medium text-pink-500 hover:bg-pink-50"
+            className="font-hand text-lg font-bold text-[var(--color-primary)] hover:brightness-90"
           >
-            Ir a hoy
+            → Ir a hoy
           </button>
         </div>
       </div>

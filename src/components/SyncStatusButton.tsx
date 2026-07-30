@@ -1,16 +1,10 @@
 // src/components/SyncStatusButton.tsx
 'use client';
 
+import { Cloud, CloudOff, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { es } from '@/lib/dates';
-
-const ICONO_POR_ESTADO: Record<string, string> = {
-  idle: '☁️',
-  syncing: '↻',
-  offline: '📴',
-  error: '⚠️',
-};
 
 const TITULO_POR_ESTADO: Record<string, string> = {
   idle: 'Sincronizado',
@@ -31,11 +25,20 @@ export default function SyncStatusButton() {
     <button
       onClick={() => sincronizarAhora()}
       title={titulo}
-      className="flex h-8 w-8 items-center justify-center rounded-full text-sm hover:bg-gray-100"
+      className="relative flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[var(--color-surface)]"
     >
-      <span className={estadoSync === 'syncing' ? 'inline-block animate-spin' : ''}>
-        {ICONO_POR_ESTADO[estadoSync]}
-      </span>
+      {estadoSync === 'syncing' && <RefreshCw size={17} className="animate-spin text-[var(--color-text-muted)]" />}
+      {estadoSync === 'offline' && <CloudOff size={17} className="text-[var(--color-text-muted)]" />}
+      {estadoSync === 'error' && <AlertTriangle size={17} className="text-[var(--color-danger)]" />}
+      {estadoSync === 'idle' && (
+        <span className="relative">
+          <Cloud size={17} className="text-[var(--color-sage)]" />
+          <CheckCircle2
+            size={11}
+            className="absolute -bottom-0.5 -right-1 rounded-full bg-[var(--color-bg-elevated)] text-[var(--color-success)]"
+          />
+        </span>
+      )}
     </button>
   );
 }

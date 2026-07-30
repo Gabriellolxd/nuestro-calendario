@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { X, Trash2 } from 'lucide-react';
 import { format, es } from '@/lib/dates';
 import type { CycleLogLocal } from '@/lib/db';
 
@@ -47,51 +48,75 @@ export default function CicloDiaModal({ log, onClose, onGuardar, onEliminar }: P
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-3 text-sm font-semibold capitalize text-gray-800">
-          🩸 {format(new Date(log.period_start + 'T00:00:00'), 'd MMMM yyyy', { locale: es })}
-        </h2>
-
-        <label className="text-xs text-gray-500">Síntomas</label>
-        <div className="mb-3 mt-1 flex flex-wrap gap-1.5">
-          {SINTOMAS_DISPONIBLES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => alternar(s)}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${sintomas.includes(s) ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-600'}`}
-            >
-              {s}
-            </button>
-          ))}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-wood-dark)]/50 px-4" onClick={onClose}>
+      <div className="panel-madera flex max-h-[85vh] w-full max-w-sm animar-entrada flex-col p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-sm font-semibold capitalize text-[var(--color-text)]">
+            {format(new Date(log.period_start + 'T00:00:00'), 'd MMMM yyyy', { locale: es })}
+          </h2>
+          <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-[var(--color-surface)]">
+            <X size={16} />
+          </button>
         </div>
 
-        <label className="text-xs text-gray-500">Notas</label>
-        <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">Síntomas</label>
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {SINTOMAS_DISPONIBLES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => alternar(s)}
+                className={`rounded-full border-2 px-3 py-1 text-xs font-medium transition-colors ${
+                  sintomas.includes(s)
+                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
+                    : 'border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-text-muted)]'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
 
-        <label className="text-xs text-gray-500">Duración fase lútea (opcional, si tienes test de ovulación)</label>
-        <input
-          type="number"
-          min={8}
-          max={20}
-          value={luteal}
-          onChange={(e) => setLuteal(e.target.value)}
-          placeholder="Ej. 14"
-          className="mb-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        />
+          <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">Notas</label>
+          <textarea
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            rows={2}
+            className="mb-3 w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+          />
 
-        <div className="flex gap-2">
-          <button onClick={eliminar} disabled={cargando} className="flex-1 rounded-lg border border-red-300 py-2 text-sm text-red-500 hover:bg-red-50 disabled:opacity-50">
-            Quitar marca
+          <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">
+            Duración fase lútea (opcional, si tienes test de ovulación)
+          </label>
+          <input
+            type="number"
+            min={8}
+            max={20}
+            value={luteal}
+            onChange={(e) => setLuteal(e.target.value)}
+            placeholder="Ej. 14"
+            className="mb-1 w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+          />
+        </div>
+
+        <div className="mt-3 flex flex-shrink-0 gap-2 border-t-2 border-[var(--color-border)] pt-3">
+          <button
+            onClick={eliminar}
+            disabled={cargando}
+            className="flex items-center justify-center rounded-xl border-2 border-[var(--color-danger)]/40 px-4 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:opacity-50"
+            aria-label="Quitar marca"
+          >
+            <Trash2 size={16} />
           </button>
-          <button onClick={guardar} disabled={cargando} className="flex-1 rounded-lg bg-pink-500 py-2 text-sm font-medium text-white hover:bg-pink-600 disabled:opacity-50">
+          <button
+            onClick={guardar}
+            disabled={cargando}
+            className="boton-tallado flex-1 rounded-xl bg-[var(--color-primary)] py-2 text-sm font-semibold text-[var(--color-text-inverse)] disabled:opacity-50"
+          >
             {cargando ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
-        <button onClick={onClose} className="mt-2 w-full rounded-lg border border-gray-300 py-2 text-sm text-gray-600">
-          Cerrar
-        </button>
       </div>
     </div>
   );

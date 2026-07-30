@@ -1,5 +1,4 @@
 // src/components/DetalleDiaModal.tsx
-
 'use client';
 
 import { format } from '@/lib/dates';
@@ -19,31 +18,31 @@ export default function DetalleDiaModal({ fecha, ocurrencias, onSeleccionar, onC
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-wood-dark)]/50 px-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+        className="panel-madera w-full max-w-sm animar-entrada p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="mb-3 text-sm font-semibold text-gray-800">
-          Eventos — {format(fecha, 'd MMM yyyy')}
+        <h2 className="font-display mb-3 text-base font-semibold capitalize text-[var(--color-text)]">
+          {format(fecha, "d 'de' MMMM")}
         </h2>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           {ordenadas.map((oc) => (
             <button
               key={`${oc.eventoId}-${oc.fecha.toISOString()}`}
               onClick={() => onSeleccionar(oc)}
-              className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-left hover:bg-gray-50"
+              className="flex items-center gap-2.5 rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2.5 text-left shadow-[0_2px_0_var(--color-border)] transition-transform hover:-translate-y-0.5"
             >
               <span
-                className="h-3 w-3 flex-shrink-0 rounded-full"
+                className="h-3.5 w-3.5 flex-shrink-0 rounded-full border border-black/10"
                 style={{ backgroundColor: oc.hex_color }}
               />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-gray-800">{oc.titulo}</p>
-                <p className="text-xs text-gray-400">
+                <p className="truncate text-sm font-semibold text-[var(--color-text)]">{oc.titulo}</p>
+                <p className="text-xs text-[var(--color-text-muted)]">
                   {format(oc.hora_inicio, 'HH:mm')} – {format(oc.hora_fin, 'HH:mm')}
                 </p>
               </div>
@@ -53,7 +52,7 @@ export default function DetalleDiaModal({ fecha, ocurrencias, onSeleccionar, onC
 
         <button
           onClick={onClose}
-          className="mt-4 w-full rounded-lg border border-gray-300 py-2 text-sm text-gray-600"
+          className="mt-4 w-full rounded-xl border-2 border-[var(--color-border)] py-2 text-sm font-medium text-[var(--color-text-muted)] hover:bg-[var(--color-surface)]"
         >
           Cerrar
         </button>

@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Palette, StickyNote as StickyNoteIcon, Droplet, Sprout, Heart, Egg, Moon, Leaf } from 'lucide-react';
 import PerfilMenu from '@/components/PerfilMenu';
 import SelectorCalendario from '@/components/SelectorCalendario';
 import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
@@ -30,7 +31,7 @@ import {
   obtenerPrediccionCacheLocal,
 } from '@/lib/localData';
 import ConflictosBadge from '@/components/ConflictosBadge';
-import { calcularFaseDia, ICONOS_FASE, NOMBRES_FASE, type FaseDia } from '@/lib/cyclePrediction';
+import { calcularFaseDia, type FaseDia } from '@/lib/cyclePrediction';
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import { solicitarPermisoNotificaciones, reprogramarTodasLasNotificaciones } from '@/lib/notifications';
 import SyncStatusButton from '@/components/SyncStatusButton';
@@ -49,6 +50,18 @@ type Vista = 'mes' | 'semana' | 'dia';
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
+
+// Representación visual de cada fase del ciclo — ícono SVG + color del
+// sistema de diseño, usado tanto para el indicador en la celda del día
+// como para el título accesible.
+const FASE_VISUAL: Record<string, { Icono: typeof Droplet; color: string; nombre: string }> = {
+  periodo: { Icono: Droplet, color: 'var(--color-primary)', nombre: 'Periodo' },
+  periodo_predicho: { Icono: Droplet, color: 'var(--color-primary-soft)', nombre: 'Periodo (predicho)' },
+  folicular: { Icono: Sprout, color: 'var(--color-sage)', nombre: 'Fase folicular' },
+  ventana_fertil: { Icono: Heart, color: 'var(--color-gold)', nombre: 'Ventana fértil' },
+  ovulacion: { Icono: Egg, color: 'var(--color-gold)', nombre: 'Ovulación' },
+  fase_lutea: { Icono: Moon, color: 'var(--color-wood)', nombre: 'Fase lútea' },
+};
 
 export default function CalendarioPage() {
   const { userId, calendarioActivo, cargando: cargandoContexto } = useCalendarioActivo();
@@ -69,8 +82,6 @@ export default function CalendarioPage() {
   const [prediccionCiclo, setPrediccionCiclo] = useState<CyclePredictionCacheLocal | undefined>(undefined);
   const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
   const [arrastreTray, setArrastreTray] = useState<{ assetId: string; x: number; y: number } | null>(null);
-  
-  //Stickers y notas
 
   const [modoDecorar, setModoDecorar] = useState(false);
   const [mostrarLibreriaStickers, setMostrarLibreriaStickers] = useState(false);
@@ -130,7 +141,7 @@ export default function CalendarioPage() {
 
   useEffect(() => {
     if (!ownerId) return;
-    const ownerIdActual = ownerId; // fija el tipo a `string` para el resto de este efecto
+    const ownerIdActual = ownerId;
 
     async function recargarTrasSync() {
       cargarEventos();
@@ -165,7 +176,7 @@ export default function CalendarioPage() {
   }
 
   function abrirModalParaCrear(dia: Date) {
-    if (esEspectador) return; // solo lectura: no se puede crear
+    if (esEspectador) return;
     const horaActual = ahoraEcuador().getHours();
     const horaFinNum = Math.min(horaActual + 1, 23);
     setDiaSeleccionado(dia);
@@ -190,8 +201,6 @@ export default function CalendarioPage() {
   }
 
   function abrirModalParaEditar(oc: Ocurrencia) {
-    // Se permite abrir incluso en solo lectura: el modal muestra los
-    // datos con los campos deshabilitados (ver EventoModal, prop soloLectura).
     setDiaSeleccionado(oc.hora_inicio);
     setOcurrenciaEditando(oc);
     setHoraDefault(null);
@@ -253,28 +262,39 @@ export default function CalendarioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      <div className="sticky top-0 z-40 bg-white shadow-sm">
-        <div className="relative flex items-center justify-between bg-white px-4 py-1">
-          <div className="w-[40px]" aria-hidden="true"></div>
+    <div className="min-h-screen bg-[var(--color-bg)] pb-24 textura-cozy">
+      <div className="sticky top-0 z-40 border-b-[3px] border-[var(--color-wood-dark)] bg-[var(--color-bg-elevated)]">
+        <div className="relative flex items-center justify-between px-4 py-2">
+          <div className="w-[40px]" aria-hidden="true" />
 
-          <div className="flex items-center gap-3">
-            <button onClick={irAnterior} className="rounded-full px-3 py-1 text-gray-500 hover:bg-gray-100">
-              ←
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 placa flex items-center gap-2 px-2 py-1.5">
+            <button
+              onClick={irAnterior}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--color-text-inverse)]/80 hover:text-[var(--color-text-inverse)]"
+              aria-label="Anterior"
+            >
+              <ChevronLeft size={16} strokeWidth={3} />
             </button>
             <button
               onClick={() => setMostrarSelectorFecha(true)}
-              className="text-center text-base font-semibold capitalize text-gray-800 hover:text-pink-500 transition-colors"
+              className="flex items-center gap-2 px-2"
               title="Seleccionar fecha"
             >
-              {tituloEncabezado()}
+              <Leaf size={14} className="text-[var(--color-sage-soft)]" strokeWidth={2.5} />
+              <span className="font-display text-sm font-semibold capitalize tracking-wide">
+                {tituloEncabezado()}
+              </span>
             </button>
-            <button onClick={irSiguiente} className="rounded-full px-3 py-1 text-gray-500 hover:bg-gray-100">
-              →
+            <button
+              onClick={irSiguiente}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[var(--color-text-inverse)]/80 hover:text-[var(--color-text-inverse)]"
+              aria-label="Siguiente"
+            >
+              <ChevronRight size={16} strokeWidth={3} />
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <SyncStatusButton />
             <ConflictosBadge
               onResuelto={() => {
@@ -295,13 +315,15 @@ export default function CalendarioPage() {
           />
         )}
 
-        <div className="flex justify-center gap-1 bg-white px-4 pb-2">
+        <div className="flex justify-center gap-1 px-4 pb-3 pt-1">
           {(['dia', 'semana', 'mes'] as Vista[]).map((v) => (
             <button
               key={v}
               onClick={() => setVista(v)}
-              className={`rounded-full px-4 py-1 text-xs font-medium capitalize ${
-                vista === v ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500'
+              className={`cinta px-5 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                vista === v
+                  ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
+                  : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'
               }`}
             >
               {v}
@@ -312,75 +334,83 @@ export default function CalendarioPage() {
         <SelectorCalendario />
       </div>
 
-      {vista === 'mes' && ownerId && (
-        <div className="relative">
-          <VistaMes
-            dias={diasMes}
-            mesActual={fechaAncla}
-            diaResaltado={diaSeleccionadoUsuario}
-            ocurrencias={ocurrencias}
-            fasePorDia={obtenerFasePorFecha}
-            onCrear={modoDecorar ? () => {} : abrirModalParaCrear}
-            onEditar={abrirModalParaEditar}
-            onDetalle={abrirDetalle}
-          />
-          <DecorationLayer
-            calendarioOwnerId={ownerId}
-            colocadoPorUserId={userId!}
-            targetMes={format(fechaAncla, 'yyyy-MM')}
-            editable={!esEspectador}
-            stickerAssets={stickerAssets}
-            refreshTick={decoTick}
-            arrastreDesdeTray={arrastreTray}
-            onArrastreDesdeTrayTerminado={() => {
-              setArrastreTray(null);
-              setDecoTick((t) => t + 1);
-            }}
-          />
-        </div>
-      )}
+      <div className="px-2 pt-2">
+        {vista === 'mes' && ownerId && (
+          <div className="relative panel-madera overflow-hidden">
+            <VistaMes
+              dias={diasMes}
+              mesActual={fechaAncla}
+              diaResaltado={diaSeleccionadoUsuario}
+              ocurrencias={ocurrencias}
+              fasePorDia={obtenerFasePorFecha}
+              onCrear={modoDecorar ? () => {} : abrirModalParaCrear}
+              onEditar={abrirModalParaEditar}
+              onDetalle={abrirDetalle}
+            />
+            <DecorationLayer
+              calendarioOwnerId={ownerId}
+              colocadoPorUserId={userId!}
+              targetMes={format(fechaAncla, 'yyyy-MM')}
+              editable={!esEspectador}
+              stickerAssets={stickerAssets}
+              refreshTick={decoTick}
+              arrastreDesdeTray={arrastreTray}
+              onArrastreDesdeTrayTerminado={() => {
+                setArrastreTray(null);
+                setDecoTick((t) => t + 1);
+              }}
+            />
+          </div>
+        )}
 
-      {vista === 'semana' && (
-        <VistaSemana
-          dias={diasSemana}
-          diaResaltado={diaSeleccionadoUsuario}
-          ocurrencias={ocurrencias}
-          onSeleccionar={abrirModalParaEditar}
-          onDetalle={(ocs) => abrirDetalle(ocs[0].hora_inicio, ocs)}
-          onCrearHora={abrirModalParaCrearHora}
-        />
-      )}
+        {vista === 'semana' && (
+          <div className="panel-madera overflow-hidden">
+            <VistaSemana
+              dias={diasSemana}
+              diaResaltado={diaSeleccionadoUsuario}
+              ocurrencias={ocurrencias}
+              onSeleccionar={abrirModalParaEditar}
+              onDetalle={(ocs) => abrirDetalle(ocs[0].hora_inicio, ocs)}
+              onCrearHora={abrirModalParaCrearHora}
+            />
+          </div>
+        )}
 
-      {vista === 'dia' && (
-        <VistaDia
-          fecha={fechaAncla}
-          ocurrencias={ocurrencias}
-          onSeleccionar={abrirModalParaEditar}
-          onDetalle={(ocs) => abrirDetalle(ocs[0].hora_inicio, ocs)}
-          onCrearHora={abrirModalParaCrearHora}
-          onCambiarFecha={setFechaAncla}
-        />
-      )}
+        {vista === 'dia' && (
+          <div className="panel-madera overflow-hidden">
+            <VistaDia
+              fecha={fechaAncla}
+              ocurrencias={ocurrencias}
+              onSeleccionar={abrirModalParaEditar}
+              onDetalle={(ocs) => abrirDetalle(ocs[0].hora_inicio, ocs)}
+              onCrearHora={abrirModalParaCrearHora}
+              onCambiarFecha={setFechaAncla}
+            />
+          </div>
+        )}
+      </div>
 
       {!esEspectador && (
         <button
           onClick={() => abrirModalParaCrear(vista === 'mes' ? ahoraEcuador() : fechaAncla)}
-          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-pink-500 text-2xl text-white shadow-lg hover:bg-pink-600"
+          className="boton-tallado fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
           aria-label="Nuevo evento"
         >
-          +
+          <Plus size={26} strokeWidth={2.5} />
         </button>
       )}
 
       {!esEspectador && vista === 'mes' && (
         <button
           onClick={() => setModoDecorar((v) => !v)}
-          className={`fixed bottom-24 right-6 flex h-12 w-12 items-center justify-center rounded-full text-xl shadow-lg ${
-            modoDecorar ? 'bg-purple-500 text-white' : 'bg-white text-purple-500 border border-purple-200'
+          className={`boton-tallado fixed bottom-24 right-6 flex h-12 w-12 items-center justify-center rounded-full ${
+            modoDecorar
+              ? 'bg-[var(--color-sage)] text-[var(--color-text-inverse)]'
+              : 'border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-sage)]'
           }`}
           aria-label="Modo decorar"
         >
-          🎨
+          <Palette size={19} strokeWidth={2.5} />
         </button>
       )}
 
@@ -398,10 +428,10 @@ export default function CalendarioPage() {
               setDecoTick((t) => t + 1);
               subirNotasPendientes().catch((err) => console.error(err));
             }}
-            className="fixed bottom-24 left-6 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-white text-xl shadow-lg"
+            className="boton-tallado fixed bottom-24 left-6 z-40 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-gold)]"
             aria-label="Agregar nota"
           >
-            📝
+            <StickyNoteIcon size={19} strokeWidth={2.5} />
           </button>
           <StickerTray
             stickers={stickerAssets}
@@ -461,12 +491,6 @@ export default function CalendarioPage() {
   );
 }
 
-// ------------------------------------------------------------------
-// Vista Mes: sin mezcla de colores por colisión de horario (esa lógica
-// vive solo en Día/Semana vía TimelineColumna). Aquí cada evento se
-// lista individualmente, ordenado por hora; solo se "acopla" en un
-// contador cuando hay MÁS de 4 en el mismo día.
-// ------------------------------------------------------------------
 function VistaMes({
   dias,
   mesActual,
@@ -494,16 +518,16 @@ function VistaMes({
 
   return (
     <>
-      <div className="grid grid-cols-7 gap-px bg-white px-1 pt-2 text-center text-xs font-medium text-gray-400">
+      <div className="grid grid-cols-7 border-b-2 border-[var(--color-border)] bg-[var(--color-surface)] text-center text-[11px] font-bold uppercase tracking-wide text-[var(--color-wood-dark)]">
         {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d) => (
-          <div key={d} className="py-1">
+          <div key={d} className="py-2">
             {d}
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-gray-200 px-1">
-        {dias.map((dia) => {
+      <div className="grid grid-cols-7">
+        {dias.map((dia, i) => {
           const ocDia = ocurrenciasDelDia(dia);
           const hayOverflow = ocDia.length > MAX_CHIPS_MES;
           const chipsVisibles = hayOverflow ? ocDia.slice(0, MAX_CHIPS_MES - 1) : ocDia;
@@ -513,46 +537,54 @@ function VistaMes({
           const esHoy = isSameDay(dia, ahoraEcuador());
           const esSeleccionado = diaResaltado ? isSameDay(dia, diaResaltado) : false;
           const fase = fasePorDia(dia);
+          const visualFase = fase ? FASE_VISUAL[fase.fase] : null;
 
           return (
             <div
               key={dia.toISOString()}
               onClick={() => onCrear(dia)}
-              className={`relative flex min-h-[96px] cursor-pointer flex-col bg-white p-1 ${
-                dentroDelMes ? '' : 'opacity-40'
-              } ${esSeleccionado && !esHoy ? 'bg-pink-50/70' : ''}`}
+              className={`relative flex min-h-[100px] cursor-pointer flex-col border-b border-r border-[var(--color-border)]/60 p-1.5 transition-colors ${
+                dentroDelMes ? 'bg-[var(--color-bg-elevated)]' : 'bg-[var(--color-surface)]/40 opacity-50'
+              } ${esSeleccionado && !esHoy ? 'bg-[var(--color-primary-soft)]' : ''} ${(i + 1) % 7 === 0 ? 'border-r-0' : ''}`}
             >
-              <span
-                className={`self-start text-xs font-medium ${
-                  esHoy
-                    ? 'flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-white'
-                    : esSeleccionado
-                    ? 'flex h-5 w-5 items-center justify-center rounded-full border-2 border-pink-400 font-semibold text-pink-600'
-                    : 'text-gray-600'
-                }`}
-              >
-                {format(dia, 'd')}
-              </span>
-
-              {fase && (
-                <span
-                  className="absolute right-1 top-1 text-[11px]"
-                  title={NOMBRES_FASE[fase.fase]}
-                >
-                  {ICONOS_FASE[fase.fase]}
-                </span>
+              {esHoy && (
+                <div className="pointer-events-none absolute inset-1 rounded-lg bg-[var(--color-gold-soft)]" style={{ boxShadow: '0 0 12px 2px rgba(217,164,65,0.35)' }} />
               )}
 
-              <div className="mt-0.5 flex flex-1 flex-col gap-0.5">
-                {chipsVisibles.map((oc) => (
+              <div className="relative z-10 flex items-center justify-between">
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                    esHoy
+                      ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
+                      : esSeleccionado
+                      ? 'border-2 border-[var(--color-primary)] text-[var(--color-primary)]'
+                      : 'text-[var(--color-text)]'
+                  }`}
+                >
+                  {format(dia, 'd')}
+                </span>
+
+                {visualFase && (
+                  <span
+                    title={visualFase.nombre}
+                    className="insignia-icono h-5 w-5"
+                    style={{ borderColor: visualFase.color, backgroundColor: `${visualFase.color}22` }}
+                  >
+                    <visualFase.Icono size={11} style={{ color: visualFase.color }} strokeWidth={2.5} />
+                  </span>
+                )}
+              </div>
+
+              <div className="relative z-10 mt-1 flex flex-1 flex-col gap-0.5">
+                {chipsVisibles.map((oc, idx) => (
                   <div
                     key={`${oc.eventoId}-${oc.fecha.toISOString()}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       onEditar(oc);
                     }}
-                    className="flex flex-1 min-h-0 items-center overflow-hidden rounded px-1 text-[9px] font-medium text-white"
-                    style={{ backgroundColor: oc.hex_color }}
+                    className="flex flex-1 min-h-0 items-center overflow-hidden rounded-md px-1.5 text-[9px] font-semibold text-white shadow-sm"
+                    style={{ backgroundColor: oc.hex_color, transform: `rotate(${idx % 2 === 0 ? -0.6 : 0.6}deg)` }}
                   >
                     <span className="truncate">{oc.titulo}</span>
                   </div>
@@ -564,7 +596,7 @@ function VistaMes({
                       e.stopPropagation();
                       onDetalle(dia, ocultos);
                     }}
-                    className="flex flex-1 min-h-0 items-center justify-center rounded bg-gray-200 text-[9px] font-medium text-gray-600"
+                    className="flex flex-1 min-h-0 items-center justify-center rounded-md bg-[var(--color-surface)] text-[9px] font-semibold text-[var(--color-text-muted)]"
                   >
                     +{ocultos.length} más
                   </div>

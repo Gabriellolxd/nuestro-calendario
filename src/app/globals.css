@@ -1,37 +1,172 @@
 @import "tailwindcss";
 
+/* ============================================================
+   SISTEMA DE DISEÑO — cafetería cozy / videojuego cozy
+   (Stardew Valley, Cozy Grove, Animal Crossing como referencia)
+   ============================================================ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-bg: #f3e4c9;
+  --color-bg-elevated: #fdf6e8;
+  --color-surface: #ead9b8;
+  --color-surface-muted: #e0cba4;
+
+  --color-primary: #b8603f;
+  --color-primary-hover: #9d4d31;
+  --color-primary-soft: #f0d3b8;
+
+  --color-wood: #8a5a3b;
+  --color-wood-dark: #5c3a26;
+  --color-wood-light: #b78a5e;
+
+  --color-gold: #d9a441;
+  --color-gold-soft: #f2dfae;
+
+  --color-sage: #7c8f5c;
+  --color-sage-soft: #dfe6cc;
+
+  --color-text: #3f2c1d;
+  --color-text-muted: #8a6f52;
+  --color-text-inverse: #fdf3e0;
+
+  --color-border: #c9a876;
+  --color-danger: #b8543f;
+  --color-success: #6f9a5c;
+
+  --sombra-panel: 0 3px 0 var(--color-wood-dark), 0 8px 18px rgba(92, 58, 38, 0.25);
+  --sombra-panel-suave: 0 2px 0 var(--color-border), 0 4px 10px rgba(92, 58, 38, 0.14);
+  --brillo-interior: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+[data-theme='dark'] {
+  --color-bg: #2c2015;
+  --color-bg-elevated: #3a2b1c;
+  --color-surface: #453521;
+  --color-surface-muted: #513f28;
+
+  --color-primary: #e08a63;
+  --color-primary-hover: #ec9d7c;
+  --color-primary-soft: #5c3a26;
+
+  --color-wood: #a97a52;
+  --color-wood-dark: #241a10;
+  --color-wood-light: #c99b6c;
+
+  --color-gold: #e6bd6e;
+  --color-gold-soft: #4a3a1e;
+
+  --color-sage: #9db278;
+  --color-sage-soft: #35401f;
+
+  --color-text: #f3e4c9;
+  --color-text-muted: #c2a97e;
+  --color-text-inverse: #2c2015;
+
+  --color-border: #5c4830;
+  --color-danger: #e08a63;
+  --color-success: #9db278;
+
+  --sombra-panel: 0 3px 0 #1a1108, 0 10px 22px rgba(0, 0, 0, 0.45);
+  --sombra-panel-suave: 0 2px 0 #1a1108, 0 6px 14px rgba(0, 0, 0, 0.35);
+  --brillo-interior: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  font-family: var(--font-nunito), system-ui, sans-serif;
+}
+
+html, body {
+  overscroll-behavior-y: contain;
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+.font-display { font-family: var(--font-fraunces), serif; }
+.font-hand { font-family: var(--font-caveat), cursive; }
+
+/* Textura de "papel/madera cálida": ruido suave sin imágenes externas */
+.textura-cozy {
+  background-image:
+    radial-gradient(circle at 15% 10%, rgba(217, 164, 65, 0.10) 0%, transparent 40%),
+    radial-gradient(circle at 85% 25%, rgba(124, 143, 92, 0.08) 0%, transparent 38%),
+    radial-gradient(circle at 50% 90%, rgba(138, 90, 59, 0.08) 0%, transparent 45%);
+  background-attachment: fixed;
+}
+
+/* ============================================================
+   COMPONENTES "FÍSICOS": panel tallado, placa, cinta, botón
+   ============================================================ */
+
+/* Panel elevado tipo tablilla de madera clara — para tarjetas, modales */
+.panel-madera {
+  background: linear-gradient(180deg, var(--color-bg-elevated), var(--color-surface));
+  border: 2px solid var(--color-border);
+  border-radius: 20px;
+  box-shadow: var(--sombra-panel-suave), var(--brillo-interior);
+}
+
+/* Placa colgante para encabezados de fecha/título — como un cartel de madera */
+.placa {
+  background: linear-gradient(180deg, var(--color-wood-light), var(--color-wood));
+  border: 2px solid var(--color-wood-dark);
+  border-radius: 14px;
+  box-shadow: var(--sombra-panel), var(--brillo-interior);
+  color: var(--color-text-inverse);
+}
+
+/* Cinta/etiqueta colgante para pestañas de vista (mes/semana/día) */
+.cinta {
+  position: relative;
+  clip-path: polygon(8% 0%, 92% 0%, 100% 50%, 92% 100%, 8% 100%, 0% 50%);
+}
+
+/* Botón tallado: sombra inferior tipo relieve, se hunde al presionar */
+.boton-tallado {
+  box-shadow: 0 3px 0 var(--color-primary-hover), var(--brillo-interior);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.boton-tallado:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--color-primary-hover), var(--brillo-interior);
+}
+
+/* Insignia de icono (fondo circular relleno en vez de icono suelto) */
+.insignia-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--color-surface); }
+::-webkit-scrollbar-thumb { background: var(--color-wood); border-radius: 999px; border: 2px solid var(--color-surface); }
+
+/* ============================================================
+   ANIMACIONES
+   ============================================================ */
 @keyframes stickerPop {
   0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
   70% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1); }
 }
-
 @keyframes pageTurn {
   0% { opacity: 0; transform: translateX(12px); }
   100% { opacity: 1; transform: translateX(0); }
 }
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes balanceoSuave {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
+}
+.animar-entrada { animation: fadeInUp 0.25s ease-out; }
+.animar-balanceo { animation: balanceoSuave 3.5s ease-in-out infinite; }

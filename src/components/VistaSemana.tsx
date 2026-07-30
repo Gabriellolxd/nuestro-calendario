@@ -7,7 +7,7 @@ import TimelineColumna, { ALTURA_HORA } from './TimelineColumna';
 
 type Props = {
   dias: Date[];
-  diaResaltado: Date | null; 
+  diaResaltado: Date | null;
   ocurrencias: Ocurrencia[];
   onSeleccionar: (oc: Ocurrencia) => void;
   onDetalle: (ocurrencias: Ocurrencia[]) => void;
@@ -25,13 +25,13 @@ export default function VistaSemana({
   const hoy = ahoraEcuador();
 
   return (
-    <div className="flex bg-white">
-      <div className="w-14 flex-shrink-0">
-        <div className="h-10" />
+    <div className="flex bg-[var(--color-bg-elevated)]">
+      <div className="w-12 flex-shrink-0 border-r border-[var(--color-border)]/60 bg-[var(--color-surface)]/40">
+        <div className="h-14 border-b-2 border-[var(--color-border)]" />
         {Array.from({ length: 24 }, (_, h) => (
           <div
             key={h}
-            className="pr-2 text-right text-[10px] text-gray-400"
+            className="pr-1.5 text-right text-[10px] font-medium text-[var(--color-text-muted)]"
             style={{ height: ALTURA_HORA }}
           >
             {String(h).padStart(2, '0')}:00
@@ -40,7 +40,7 @@ export default function VistaSemana({
       </div>
 
       <div className="grid flex-1 grid-cols-7">
-        {dias.map((dia) => {
+        {dias.map((dia, i) => {
           const ocDia = ocurrencias.filter((oc) => isSameDay(oc.hora_inicio, dia));
           const esHoy = isSameDay(dia, hoy);
           const esSeleccionado = diaResaltado ? isSameDay(dia, diaResaltado) : false;
@@ -48,19 +48,21 @@ export default function VistaSemana({
           return (
             <div
               key={dia.toISOString()}
-              className={`border-l border-gray-100 ${
-                esSeleccionado && !esHoy ? 'bg-pink-50/60' : ''
+              className={`border-l border-[var(--color-border)]/60 ${i === 0 ? 'border-l-0' : ''} ${
+                esSeleccionado && !esHoy ? 'bg-[var(--color-primary-soft)]/50' : ''
               }`}
             >
-              <div className="flex h-10 flex-col items-center justify-center text-xs text-gray-500">
-                <span className="capitalize">{format(dia, 'EEE', { locale: es })}</span>
+              <div className="flex h-14 flex-col items-center justify-center gap-0.5 border-b-2 border-[var(--color-border)] bg-[var(--color-surface)]/40 text-xs">
+                <span className="font-hand text-[13px] font-bold capitalize text-[var(--color-text-muted)]">
+                  {format(dia, 'EEE', { locale: es })}
+                </span>
                 <span
-                  className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${
                     esHoy
-                      ? 'bg-pink-500 text-white'
+                      ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
                       : esSeleccionado
-                      ? 'border-2 border-pink-400 font-semibold text-pink-600'
-                      : 'text-gray-700'
+                      ? 'border-2 border-[var(--color-primary)] text-[var(--color-primary)]'
+                      : 'text-[var(--color-text)]'
                   }`}
                 >
                   {format(dia, 'd')}

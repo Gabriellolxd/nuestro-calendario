@@ -1,7 +1,7 @@
 // src/components/VistaDia.tsx
 'use client';
 
-import { format, isSameDay } from '@/lib/dates';
+import { format, es, isSameDay, ahoraEcuador } from '@/lib/dates';
 import type { Ocurrencia } from '@/lib/recurrence';
 import TimelineColumna, { ALTURA_HORA } from './TimelineColumna';
 
@@ -20,21 +20,31 @@ export default function VistaDia({
   onSeleccionar,
   onDetalle,
   onCrearHora,
-  onCambiarFecha,
 }: Props) {
   const ocDia = ocurrencias.filter((oc) => isSameDay(oc.hora_inicio, fecha));
-  const esHoy = isSameDay(fecha, new Date());
+  const esHoy = isSameDay(fecha, ahoraEcuador());
 
   return (
-    <div className="bg-white">
-      
+    <div className="bg-[var(--color-bg-elevated)]">
+      <div className="flex items-center justify-center gap-2 border-b-2 border-[var(--color-border)] bg-[var(--color-surface)]/40 py-2">
+        <span className="font-hand text-lg font-bold capitalize text-[var(--color-text-muted)]">
+          {format(fecha, "EEEE", { locale: es })}
+        </span>
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
+            esHoy ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)]' : 'text-[var(--color-text)]'
+          }`}
+        >
+          {format(fecha, 'd')}
+        </span>
+      </div>
 
       <div className="flex">
-        <div className="w-14 flex-shrink-0">
+        <div className="w-12 flex-shrink-0 border-r border-[var(--color-border)]/60 bg-[var(--color-surface)]/40">
           {Array.from({ length: 24 }, (_, h) => (
             <div
               key={h}
-              className="pr-2 text-right text-[10px] text-gray-400"
+              className="pr-1.5 text-right text-[10px] font-medium text-[var(--color-text-muted)]"
               style={{ height: ALTURA_HORA }}
             >
               {String(h).padStart(2, '0')}:00

@@ -75,6 +75,9 @@ export default function VincularPage() {
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-md">
         <h1 className="mb-2 text-center text-2xl font-semibold text-gray-800">Comparte tu calendario</h1>
         <p className="mb-6 text-center text-sm text-gray-500">
+          Para compartir tu calendario, copia el código de tu pareja y pégalo aquí.
+        </p>
+        <p className="mb-6 text-center text-sm text-gray-750">
           Tu código: <span className="font-mono font-semibold text-pink-500">{miCodigo || '...'}</span>
         </p>
 

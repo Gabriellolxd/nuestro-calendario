@@ -5,6 +5,7 @@ import { ecuadorToUtc } from '@/lib/dates';
 import { getDeviceId } from '@/lib/device';
 import { PALETA_COLORES } from '@/lib/colors';
 import { format } from 'date-fns';
+import { X, Trash2, Repeat, Bell, StickyNote } from 'lucide-react';
 import type { EventoBase, Ocurrencia, TipoRecurrencia } from '@/lib/recurrence';
 import {
   crearEventoLocal,
@@ -89,7 +90,6 @@ export default function EventoModal({
       const nuevaHoraFinUtc = ecuadorToUtc(fechaEditable, horaFin);
 
       if (!edicion) {
-        // --- CREACIÓN ---
         const nuevoId = crypto.randomUUID();
         await crearEventoLocal({
           id: nuevoId,
@@ -107,7 +107,6 @@ export default function EventoModal({
           client_updated_at: ahora,
           deleted_at: null,
         });
-
         await programarNotificacionEvento({
           id: nuevoId,
           titulo,
@@ -119,7 +118,6 @@ export default function EventoModal({
           minutos_aviso: minutosAviso,
         });
       } else if (!esRecurrente || alcance === 'serie') {
-        // --- EDICIÓN de evento único, o de TODA la serie recurrente ---
         await actualizarEventoLocal(edicion.eventoOriginal.id, {
           titulo,
           descripcion: descripcion || null,
@@ -132,7 +130,6 @@ export default function EventoModal({
           change_uuid: crypto.randomUUID(),
           client_updated_at: ahora,
         });
-
         await programarNotificacionEvento({
           id: edicion.eventoOriginal.id,
           titulo,
@@ -144,7 +141,6 @@ export default function EventoModal({
           minutos_aviso: minutosAviso,
         });
       } else {
-        // --- EDICIÓN de SOLO ESTA ocurrencia (excepción puntual) ---
         const fechaClave = format(edicion.ocurrencia.fecha, 'yyyy-MM-dd');
         const excepcionId = edicion.ocurrencia.exceptionId ?? crypto.randomUUID();
 
@@ -232,169 +228,195 @@ export default function EventoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <h2 className="mb-4 text-lg font-semibold text-gray-800">
-          {esEdicion ? 'Editar evento' : 'Nuevo evento'} — {format(fecha, 'd MMM yyyy')}
-        </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-wood-dark)]/50 px-4">
+      <div className="panel-madera flex max-h-[90vh] w-full max-w-md animar-entrada flex-col p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">
+            {esEdicion ? 'Editar evento' : 'Nuevo evento'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-[var(--color-surface)]"
+            aria-label="Cerrar"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <p className="font-hand -mt-3 mb-4 text-base text-[var(--color-text-muted)]">
+          {format(fecha, 'd MMM yyyy')}
+        </p>
 
-        <form onSubmit={handleGuardar}>
-        <fieldset disabled={soloLectura} className="space-y-3">
-          <input
-            type="text"
-            placeholder="Título"
-            value={titulo}
-            onChange={(e) => setTitulo(e.target.value)}
-            required
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
-          />
-
-          <textarea
-            placeholder="Descripción (opcional)"
-            value={descripcion}
-            onChange={(e) => setDescripcion(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
-            rows={2}
-          />
-
-          <div>
-            <label className="text-xs text-gray-500">Fecha</label>
-            <input
-              type="date"
-              value={fechaEditable}
-              onChange={(e) => setFechaEditable(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
-            />
-          </div>
-
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="text-xs text-gray-500">Inicio</label>
+        <form onSubmit={handleGuardar} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <fieldset disabled={soloLectura} className="space-y-3.5">
               <input
-                type="time"
-                value={horaInicio}
-                onChange={(e) => setHoraInicio(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                type="text"
+                placeholder="Título"
+                value={titulo}
+                onChange={(e) => setTitulo(e.target.value)}
+                required
+                className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
               />
-            </div>
-            <div className="flex-1">
-              <label className="text-xs text-gray-500">Fin</label>
-              <input
-                type="time"
-                value={horaFin}
-                onChange={(e) => setHoraFin(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2"
-              />
-            </div>
-          </div>
 
-          <div>
-            <label className="text-xs text-gray-500">Color</label>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              {PALETA_COLORES.map((c) => (
-                <button
-                  key={c.hex}
-                  type="button"
-                  onClick={() => setColor(c.hex)}
-                  className={`h-8 w-8 rounded-full transition-transform active:scale-95 ${
-                    color.toLowerCase() === c.hex.toLowerCase() ? 'ring-2 ring-offset-2 ring-gray-800 scale-105' : ''
-                  }`}
-                  style={{ backgroundColor: c.hex }}
-                  aria-label={c.nombre}
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)]">
+                  <StickyNote size={13} />
+                  Nota del evento
+                </label>
+                <textarea
+                  placeholder="Escribe algo sobre este evento..."
+                  value={descripcion}
+                  onChange={(e) => setDescripcion(e.target.value)}
+                  className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+                  rows={2}
                 />
-              ))}
+              </div>
 
-              <div className="relative h-8 w-8">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">Fecha</label>
                 <input
-                  ref={colorInputRef}
-                  type="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  type="date"
+                  value={fechaEditable}
+                  onChange={(e) => setFechaEditable(e.target.value)}
+                  className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
                 />
-                <button
-                  type="button"
-                  onClick={() => colorInputRef.current?.click()}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full transition-transform active:scale-95 ${
-                    !esColorPredefinido ? 'ring-2 ring-offset-2 ring-gray-800 scale-105' : ''
-                  }`}
-                  style={{
-                    background: esColorPredefinido
-                      ? 'conic-gradient(from 0deg, red, yellow, lime, aqua, blue, magenta, red)'
-                      : color,
-                  }}
-                  aria-label="Color personalizado"
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">Inicio</label>
+                  <input
+                    type="time"
+                    value={horaInicio}
+                    onChange={(e) => setHoraInicio(e.target.value)}
+                    className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">Fin</label>
+                  <input
+                    type="time"
+                    value={horaFin}
+                    onChange={(e) => setHoraFin(e.target.value)}
+                    className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">Color</label>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {PALETA_COLORES.map((c) => (
+                    <button
+                      key={c.hex}
+                      type="button"
+                      onClick={() => setColor(c.hex)}
+                      className={`h-8 w-8 rounded-full border-2 border-black/10 transition-transform active:scale-95 ${
+                        color.toLowerCase() === c.hex.toLowerCase() ? 'ring-2 ring-offset-2 ring-[var(--color-primary)] scale-105' : ''
+                      }`}
+                      style={{ backgroundColor: c.hex }}
+                      aria-label={c.nombre}
+                    />
+                  ))}
+
+                  <div className="relative h-8 w-8">
+                    <input
+                      ref={colorInputRef}
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => colorInputRef.current?.click()}
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 border-black/10 transition-transform active:scale-95 ${
+                        !esColorPredefinido ? 'ring-2 ring-offset-2 ring-[var(--color-primary)] scale-105' : ''
+                      }`}
+                      style={{
+                        background: esColorPredefinido
+                          ? 'conic-gradient(from 0deg, red, yellow, lime, aqua, blue, magenta, red)'
+                          : color,
+                      }}
+                      aria-label="Color personalizado"
+                    >
+                      {!esColorPredefinido && <span className="h-2 w-2 rounded-full bg-white shadow-sm" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)]">
+                  <Repeat size={13} />
+                  Repetir
+                </label>
+                <select
+                  value={tipoRecurrencia}
+                  onChange={(e) => setTipoRecurrencia(e.target.value as TipoRecurrencia)}
+                  disabled={esRecurrente && alcance === 'unica'}
+                  className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)] disabled:opacity-50"
                 >
-                  {!esColorPredefinido && <span className="h-2 w-2 rounded-full bg-white shadow-sm" />}
-                </button>
+                  <option value="none">No se repite</option>
+                  <option value="daily">Cada día</option>
+                  <option value="weekly">Cada semana</option>
+                  <option value="monthly">Cada mes</option>
+                  <option value="yearly">Cada año</option>
+                </select>
               </div>
-            </div>
-          </div>
 
-          <div>
-            <label className="text-xs text-gray-500">Repetir</label>
-            <select
-              value={tipoRecurrencia}
-              onChange={(e) => setTipoRecurrencia(e.target.value as TipoRecurrencia)}
-              disabled={esRecurrente && alcance === 'unica'}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
-            >
-              <option value="none">No se repite</option>
-              <option value="daily">Cada día</option>
-              <option value="weekly">Cada semana</option>
-              <option value="monthly">Cada mes</option>
-              <option value="yearly">Cada año</option>
-            </select>
-          </div>
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)]">
+                  <Bell size={13} />
+                  Avisar antes
+                </label>
+                <select
+                  value={minutosAviso}
+                  onChange={(e) => setMinutosAviso(Number(e.target.value))}
+                  className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+                >
+                  <option value={0}>Al momento del evento</option>
+                  <option value={5}>5 minutos antes</option>
+                  <option value={10}>10 minutos antes</option>
+                  <option value={30}>30 minutos antes</option>
+                  <option value={60}>1 hora antes</option>
+                  <option value={1440}>1 día antes</option>
+                </select>
+              </div>
 
-          <div>
-            <label className="text-xs text-gray-500">Avisar antes</label>
-            <select
-              value={minutosAviso}
-              onChange={(e) => setMinutosAviso(Number(e.target.value))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
-            >
-              <option value={0}>Al momento del evento</option>
-              <option value={5}>5 minutos antes</option>
-              <option value={10}>10 minutos antes</option>
-              <option value={30}>30 minutos antes</option>
-              <option value={60}>1 hora antes</option>
-              <option value={1440}>1 día antes</option>
-            </select>
-          </div>
+              {esRecurrente && (
+                <div className="rounded-xl border-2 border-dashed border-[var(--color-gold)] bg-[var(--color-gold-soft)] p-3">
+                  <p className="mb-2 text-xs font-medium text-[var(--color-wood-dark)]">
+                    Este evento se repite. ¿Qué quieres modificar?
+                  </p>
+                  <div className="flex gap-4 text-sm text-[var(--color-text)]">
+                    <label className="flex items-center gap-1.5">
+                      <input type="radio" checked={alcance === 'unica'} onChange={() => setAlcance('unica')} />
+                      Solo esta fecha
+                    </label>
+                    <label className="flex items-center gap-1.5">
+                      <input type="radio" checked={alcance === 'serie'} onChange={() => setAlcance('serie')} />
+                      Toda la serie
+                    </label>
+                  </div>
+                </div>
+              )}
+            </fieldset>
 
-          {esRecurrente && (
-            <div className="rounded-lg bg-pink-50 p-3">
-              <p className="mb-2 text-xs font-medium text-gray-600">
-                Este evento se repite. ¿Qué quieres modificar?
+            {error && <p className="mt-3 text-sm text-[var(--color-danger)]">{error}</p>}
+
+            {soloLectura && (
+              <p className="mt-3 rounded-xl bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                👁 Modo solo lectura — no tienes permiso de edición sobre este calendario.
               </p>
-              <div className="flex gap-4 text-sm text-gray-700">
-                <label className="flex items-center gap-2">
-                  <input type="radio" checked={alcance === 'unica'} onChange={() => setAlcance('unica')} />
-                  Solo esta fecha
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="radio" checked={alcance === 'serie'} onChange={() => setAlcance('serie')} />
-                  Toda la serie
-                </label>
-              </div>
-            </div>
-          )}
-        </fieldset>
+            )}
+          </div>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
-
-          {soloLectura && (
-            <p className="mt-3 rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-500">
-              👁️ Modo solo lectura — no tienes permiso de edición sobre este calendario.
-            </p>
-          )}
-
-          <div className="mt-3 flex gap-2 pt-2">
+          <div className="mt-4 flex flex-shrink-0 gap-2 border-t-2 border-[var(--color-border)] pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-lg border border-gray-300 py-2 text-gray-600"
+              className="flex-1 rounded-xl border-2 border-[var(--color-border)] py-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface)]"
             >
               {soloLectura ? 'Cerrar' : 'Cancelar'}
             </button>
@@ -403,16 +425,17 @@ export default function EventoModal({
                 type="button"
                 onClick={handleEliminar}
                 disabled={cargando}
-                className="flex-1 rounded-lg border border-red-300 py-2 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                className="flex items-center justify-center rounded-xl border-2 border-[var(--color-danger)]/40 px-4 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:opacity-50"
+                aria-label="Eliminar"
               >
-                Eliminar
+                <Trash2 size={16} />
               </button>
             )}
             {!soloLectura && (
               <button
                 type="submit"
                 disabled={cargando}
-                className="flex-1 rounded-lg bg-pink-500 py-2 font-medium text-white hover:bg-pink-600 disabled:opacity-50"
+                className="boton-tallado flex-1 rounded-xl bg-[var(--color-primary)] py-2 font-semibold text-[var(--color-text-inverse)] disabled:opacity-50"
               >
                 {cargando ? 'Guardando...' : 'Guardar'}
               </button>
