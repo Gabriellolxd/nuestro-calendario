@@ -33,8 +33,7 @@ import {
 import ConflictosBadge from '@/components/ConflictosBadge';
 import { calcularFaseDia, type FaseDia } from '@/lib/cyclePrediction';
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
-import { solicitarPermisoNotificaciones, reprogramarTodasLasNotificaciones } from '@/lib/notifications';
-import SyncStatusButton from '@/components/SyncStatusButton';
+import { solicitarPermisoNotificaciones, reprogramarNotificacionesDeUsuario } from '@/lib/notifications';import SyncStatusButton from '@/components/SyncStatusButton';
 import DecorationLayer from '@/components/DecorationLayer';
 import StickerLibraryModal from '@/components/StickerLibraryModal';
 import { obtenerStickersLocal, colocarStickerLocal, subirStickersPendientes, descargarStickersDesdeNube } from '@/lib/stickersLocal';
@@ -64,8 +63,7 @@ const FASE_VISUAL: Record<string, { Icono: typeof Droplet; color: string; nombre
 };
 
 export default function CalendarioPage() {
-  const { userId, calendarioActivo, cargando: cargandoContexto } = useCalendarioActivo();
-  const ownerId = calendarioActivo?.ownerId ?? null;
+  const { userId, calendarioActivo, cargando: cargandoContexto, opciones } = useCalendarioActivo();  const ownerId = calendarioActivo?.ownerId ?? null;
   const esEspectador = calendarioActivo?.rol === 'espectador';
 
   const [vista, setVista] = useState<Vista>('mes');
@@ -141,22 +139,26 @@ export default function CalendarioPage() {
 
   useEffect(() => {
     if (!ownerId) return;
-    const ownerIdActual = ownerId;
 
     async function recargarTrasSync() {
       cargarEventos();
       cargarCiclo();
-
-      const eventosParaNotificar = await obtenerEventosLocal(ownerIdActual);
-      const idsParaNotificar = eventosParaNotificar.map((e) => e.id);
-      const excepcionesParaNotificar = await obtenerExcepcionesLocal(idsParaNotificar);
-      reprogramarTodasLasNotificaciones(eventosParaNotificar, excepcionesParaNotificar);
     }
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga datos locales después de cada ciclo de sync
     recargarTrasSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncTick, ownerId]);
+
+  // Recalcula notificaciones de TODOS los calendarios a los que tienes
+  // acceso (propio + compartidos), no solo el que tienes abierto ahora.
+  useEffect(() => {
+    if (!userId || opciones.length === 0) return;
+    reprogramarNotificacionesDeUsuario(opciones).catch((err) =>
+      console.error('Error reprogramando notificaciones:', err)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncTick, userId, opciones.length]);
 
   useEffect(() => {
     if (!ownerId || !userId) return;

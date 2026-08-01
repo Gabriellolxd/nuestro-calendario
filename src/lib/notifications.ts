@@ -1,8 +1,11 @@
 // src/lib/notifications.ts
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { utcToEcuador } from './dates';
-import type { EventoBase, Excepcion, TipoRecurrencia } from './recurrence';
+import { addDays } from 'date-fns';
+import { ahoraEcuador, format } from './dates';
+import { proyectarEventos, type EventoBase, type Excepcion } from './recurrence';
+import { obtenerCalendariosSilenciados } from './notificationPrefs';
+import { obtenerEventosYExcepcionesRemoto } from './notificationsRemoto';
 
 function esNativo(): boolean {
   return Capacitor.isNativePlatform();
@@ -16,32 +19,13 @@ function hashANumero(str: string): number {
   return Math.abs(hash) % 2147483647;
 }
 
-function idParaEvento(eventoId: string): number {
-  return hashANumero(`evento-${eventoId}`);
+function idParaOcurrencia(eventoId: string, fechaStr: string): number {
+  return hashANumero(`oc-${eventoId}-${fechaStr}`);
 }
-
-function idParaExcepcion(excepcionId: string): number {
-  return hashANumero(`excepcion-${excepcionId}`);
-}
-
-const REPEAT_MAP: Partial<Record<TipoRecurrencia, 'day' | 'week' | 'month' | 'year'>> = {
-  daily: 'day',
-  weekly: 'week',
-  monthly: 'month',
-  yearly: 'year',
-};
-
-// Tipo local para el schedule (evita "any" sin depender del nombre exacto
-// del tipo interno del plugin, que puede variar entre versiones).
-type ScheduleConfig = {
-  at: Date;
-  allowWhileIdle?: boolean;
-  repeats?: boolean;
-  every?: 'year' | 'month' | 'two-weeks' | 'week' | 'day' | 'hour' | 'minute' | 'second';
-};
 
 const CHANNEL_ID = 'eventos-nuestro-calendario-v2';
 const NOMBRE_ARCHIVO_SONIDO = 'notificacion_evento.wav';
+const VENTANA_DIAS = 60; // hasta cuántos días adelante se programan notificaciones
 
 export async function solicitarPermisoNotificaciones() {
   if (!esNativo()) return;
@@ -61,105 +45,88 @@ export async function solicitarPermisoNotificaciones() {
   }
 }
 
-export async function cancelarNotificacionEvento(eventoId: string) {
+type NotifProgramada = {
+  id: number;
+  title: string;
+  body: string;
+  channelId: string;
+  smallIcon: string;
+  schedule: { at: Date; allowWhileIdle: boolean };
+};
+
+type DatosCalendario = { ownerId: string; eventos: EventoBase[]; excepciones: Excepcion[] };
+
+// Motor principal: recalcula TODAS las notificaciones necesarias a partir de
+// cero. Usa proyectarEventos — la MISMA función que dibuja el calendario —
+// como única fuente de verdad: si un evento fue eliminado o un día fue
+// excepcionado/cancelado, simplemente no aparece en la proyección, y por
+// lo tanto tampoco se reprograma. Cualquier notificación que el sistema ya
+// tenía programada y que no aparece en la nueva lista válida se cancela
+// aquí mismo — así un evento borrado en OTRO dispositivo deja de sonar en
+// este apenas se sincroniza.
+export async function reprogramarNotificacionesCalendarios(calendarios: DatosCalendario[]) {
   if (!esNativo()) return;
+
+  const ahora = ahoraEcuador();
+  const limite = addDays(ahora, VENTANA_DIAS);
+  const idsValidos = new Set<number>();
+  const aProgramar: NotifProgramada[] = [];
+
+  for (const cal of calendarios) {
+    const ocurrencias = proyectarEventos(cal.eventos, cal.excepciones, ahora, limite);
+    const minutosAvisoPorId = new Map(cal.eventos.map((e) => [e.id, e.minutos_aviso]));
+
+    for (const oc of ocurrencias) {
+      const minutosAviso = minutosAvisoPorId.get(oc.eventoId) ?? 5;
+      const disparo = new Date(oc.hora_inicio.getTime() - minutosAviso * 60000);
+      if (disparo.getTime() <= Date.now()) continue; // ya pasó, no tiene sentido programarla
+
+      const fechaStr = format(oc.fecha, 'yyyy-MM-dd');
+      const id = idParaOcurrencia(oc.eventoId, fechaStr);
+      idsValidos.add(id);
+
+      aProgramar.push({
+        id,
+        title: oc.titulo,
+        body: 'Toca para ver el detalle en nuestro-calendario',
+        channelId: CHANNEL_ID,
+        smallIcon: 'ic_stat_name',
+        schedule: { at: disparo, allowWhileIdle: true },
+      });
+    }
+  }
+
   try {
-    await LocalNotifications.cancel({ notifications: [{ id: idParaEvento(eventoId) }] });
+    const pendientes = await LocalNotifications.getPending();
+    const aCancelar = pendientes.notifications
+      .filter((n) => !idsValidos.has(n.id))
+      .map((n) => ({ id: n.id }));
+
+    if (aCancelar.length > 0) {
+      await LocalNotifications.cancel({ notifications: aCancelar });
+    }
+    if (aProgramar.length > 0) {
+      await LocalNotifications.schedule({ notifications: aProgramar });
+    }
   } catch (err) {
-    console.error('Error cancelando notificación de evento:', err);
+    console.error('Error reprogramando notificaciones:', err);
   }
 }
 
-export async function cancelarNotificacionExcepcion(excepcionId: string) {
+// Punto de entrada de alto nivel: recibe la lista de calendarios a los que
+// el usuario tiene acceso (propio + compartidos), descarta los que estén
+// silenciados, trae sus datos actuales desde Supabase, y recalcula todo.
+export async function reprogramarNotificacionesDeUsuario(opciones: { ownerId: string }[]) {
   if (!esNativo()) return;
-  try {
-    await LocalNotifications.cancel({ notifications: [{ id: idParaExcepcion(excepcionId) }] });
-  } catch (err) {
-    console.error('Error cancelando notificación de excepción:', err);
-  }
-}
+  const silenciados = obtenerCalendariosSilenciados();
+  const activos = opciones.filter((o) => !silenciados.includes(o.ownerId));
 
-export async function programarNotificacionEvento(evento: EventoBase) {
-  if (!esNativo()) return;
-  await cancelarNotificacionEvento(evento.id);
-  if (evento.minutos_aviso == null) return;
+  const datos = await Promise.all(
+    activos.map(async (o) => {
+      const { eventos, excepciones } = await obtenerEventosYExcepcionesRemoto(o.ownerId);
+      return { ownerId: o.ownerId, eventos, excepciones };
+    })
+  );
 
-  const horaInicioEcuador = utcToEcuador(evento.hora_inicio);
-  const disparo = new Date(horaInicioEcuador.getTime() - evento.minutos_aviso * 60000);
-
-  const esRecurrente = evento.tipo_recurrencia !== 'none';
-  if (!esRecurrente && disparo.getTime() < Date.now()) return;
-
-  const schedule: ScheduleConfig = { at: disparo, allowWhileIdle: true };
-  if (esRecurrente) {
-    schedule.repeats = true;
-    schedule.every = REPEAT_MAP[evento.tipo_recurrencia];
-  }
-
-  const cuerpo = evento.descripcion || 'Toca para ver el detalle en nuestro-calendario';
-
-  try {
-    await LocalNotifications.schedule({
-      notifications: [
-        {
-          id: idParaEvento(evento.id),
-          title: evento.titulo,
-          body: cuerpo,
-          largeBody: cuerpo,
-          channelId: CHANNEL_ID,
-          smallIcon: 'ic_stat_name',
-          schedule,
-        },
-      ],
-    });
-  } catch (err) {
-    console.error('Error programando notificación:', err);
-  }
-}
-
-export async function programarNotificacionExcepcion(
-  excepcion: Excepcion,
-  eventoBase: EventoBase
-) {
-  if (!esNativo()) return;
-  await cancelarNotificacionExcepcion(excepcion.id);
-
-  if (excepcion.is_cancelled || !excepcion.nueva_hora_inicio) return;
-
-  const horaInicioEcuador = utcToEcuador(excepcion.nueva_hora_inicio);
-  const disparo = new Date(horaInicioEcuador.getTime() - eventoBase.minutos_aviso * 60000);
-  if (disparo.getTime() < Date.now()) return;
-
-  const titulo = excepcion.nuevo_titulo ?? eventoBase.titulo;
-
-  try {
-    await LocalNotifications.schedule({
-      notifications: [
-        {
-          id: idParaExcepcion(excepcion.id),
-          title: titulo,
-          body: 'Toca para ver el detalle en nuestro-calendario',
-          channelId: CHANNEL_ID,
-          smallIcon: 'ic_stat_name',
-          schedule: { at: disparo, allowWhileIdle: true },
-        },
-      ],
-    });
-  } catch (err) {
-    console.error('Error programando notificación de excepción:', err);
-  }
-}
-
-export async function reprogramarTodasLasNotificaciones(
-  eventos: EventoBase[],
-  excepciones: Excepcion[]
-) {
-  if (!esNativo()) return;
-  for (const evento of eventos) {
-    await programarNotificacionEvento(evento);
-  }
-  for (const excepcion of excepciones) {
-    const eventoBase = eventos.find((e) => e.id === excepcion.event_base_id);
-    if (eventoBase) await programarNotificacionExcepcion(excepcion, eventoBase);
-  }
+  await reprogramarNotificacionesCalendarios(datos);
 }

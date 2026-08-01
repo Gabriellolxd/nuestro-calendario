@@ -14,12 +14,8 @@ import {
   upsertExcepcionLocal,
 } from '@/lib/localData';
 import { subirCambiosPendientes } from '@/lib/sync';
-import {
-  programarNotificacionEvento,
-  cancelarNotificacionEvento,
-  programarNotificacionExcepcion,
-  cancelarNotificacionExcepcion,
-} from '@/lib/notifications';
+import { reprogramarNotificacionesDeUsuario } from '@/lib/notifications';
+import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
 
 type ModoEdicion = {
   ocurrencia: Ocurrencia;
@@ -47,6 +43,7 @@ export default function EventoModal({
   onClose,
   onGuardado,
 }: Props) {
+  const { opciones } = useCalendarioActivo();
   const esEdicion = !!edicion;
   const esRecurrente = edicion ? edicion.eventoOriginal.tipo_recurrencia !== 'none' : false;
 
@@ -72,6 +69,15 @@ export default function EventoModal({
 
   const colorInputRef = useRef<HTMLInputElement>(null);
   const esColorPredefinido = PALETA_COLORES.some((c) => c.hex.toLowerCase() === color.toLowerCase());
+
+  function despuesDeGuardar() {
+    onGuardado();
+    onClose();
+    subirCambiosPendientes().catch((err) => console.error('Error sincronizando:', err));
+    reprogramarNotificacionesDeUsuario(opciones).catch((err) =>
+      console.error('Error reprogramando notificaciones:', err)
+    );
+  }
 
   async function handleGuardar(e: React.FormEvent) {
     e.preventDefault();
@@ -107,16 +113,6 @@ export default function EventoModal({
           client_updated_at: ahora,
           deleted_at: null,
         });
-        await programarNotificacionEvento({
-          id: nuevoId,
-          titulo,
-          descripcion: descripcion || null,
-          hex_color: color,
-          hora_inicio: nuevaHoraInicioUtc,
-          hora_fin: nuevaHoraFinUtc,
-          tipo_recurrencia: tipoRecurrencia,
-          minutos_aviso: minutosAviso,
-        });
       } else if (!esRecurrente || alcance === 'serie') {
         await actualizarEventoLocal(edicion.eventoOriginal.id, {
           titulo,
@@ -130,22 +126,10 @@ export default function EventoModal({
           change_uuid: crypto.randomUUID(),
           client_updated_at: ahora,
         });
-        await programarNotificacionEvento({
-          id: edicion.eventoOriginal.id,
-          titulo,
-          descripcion: descripcion || null,
-          hex_color: color,
-          hora_inicio: nuevaHoraInicioUtc,
-          hora_fin: nuevaHoraFinUtc,
-          tipo_recurrencia: tipoRecurrencia,
-          minutos_aviso: minutosAviso,
-        });
       } else {
         const fechaClave = format(edicion.ocurrencia.fecha, 'yyyy-MM-dd');
-        const excepcionId = edicion.ocurrencia.exceptionId ?? crypto.randomUUID();
-
         await upsertExcepcionLocal({
-          id: excepcionId,
+          id: edicion.ocurrencia.exceptionId ?? crypto.randomUUID(),
           event_base_id: edicion.eventoOriginal.id,
           fecha_excepcion: fechaClave,
           nuevo_titulo: titulo,
@@ -158,25 +142,9 @@ export default function EventoModal({
           client_updated_at: ahora,
           deleted_at: null,
         });
-
-        await programarNotificacionExcepcion(
-          {
-            id: excepcionId,
-            event_base_id: edicion.eventoOriginal.id,
-            fecha_excepcion: fechaClave,
-            nuevo_titulo: titulo,
-            nuevo_hex_color: color,
-            nueva_hora_inicio: nuevaHoraInicioUtc,
-            nueva_hora_fin: nuevaHoraFinUtc,
-            is_cancelled: false,
-          },
-          edicion.eventoOriginal
-        );
       }
 
-      onGuardado();
-      onClose();
-      subirCambiosPendientes().catch((err) => console.error('Error sincronizando:', err));
+      despuesDeGuardar();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar el evento.');
     } finally {
@@ -194,13 +162,10 @@ export default function EventoModal({
 
       if (!esRecurrente || alcance === 'serie') {
         await eliminarEventoLocal(edicion.eventoOriginal.id, deviceId);
-        await cancelarNotificacionEvento(edicion.eventoOriginal.id);
       } else {
         const fechaClave = format(edicion.ocurrencia.fecha, 'yyyy-MM-dd');
-        const excepcionId = edicion.ocurrencia.exceptionId ?? crypto.randomUUID();
-
         await upsertExcepcionLocal({
-          id: excepcionId,
+          id: edicion.ocurrencia.exceptionId ?? crypto.randomUUID(),
           event_base_id: edicion.eventoOriginal.id,
           fecha_excepcion: fechaClave,
           nuevo_titulo: null,
@@ -213,13 +178,9 @@ export default function EventoModal({
           client_updated_at: ahora,
           deleted_at: null,
         });
-
-        await cancelarNotificacionExcepcion(excepcionId);
       }
 
-      onGuardado();
-      onClose();
-      subirCambiosPendientes().catch((err) => console.error('Error sincronizando:', err));
+      despuesDeGuardar();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al eliminar el evento.');
     } finally {

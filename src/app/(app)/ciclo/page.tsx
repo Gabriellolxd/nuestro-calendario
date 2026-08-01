@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Droplet, Sparkles, Egg, CalendarHeart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Droplet, Sparkles, Egg, CalendarHeart, Sprout, Heart, Moon } from 'lucide-react';
 import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
 import { getDeviceId } from '@/lib/device';
 import {
@@ -17,7 +17,7 @@ import {
 import { subirCambiosPendientes } from '@/lib/sync';
 import { getMonthGrid, isSameMonth, isSameDay, format, es, ahoraEcuador } from '@/lib/dates';
 import { addMonths, subMonths } from 'date-fns';
-import { calcularFaseDia, ICONOS_FASE, NOMBRES_FASE, type FaseDia, type CycleLogInput } from '@/lib/cyclePrediction';
+import { calcularFaseDia, NOMBRES_FASE, type FaseDia, type CycleLogInput } from '@/lib/cyclePrediction';
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import CicloDiaModal from '@/components/CicloDiaModal';
 import PantallaCarga from '@/components/PantallaCarga';
@@ -41,6 +41,19 @@ export default function CicloPage() {
   const [prediccion, setPrediccion] = useState<CyclePredictionCacheLocal | undefined>(undefined);
   const [diaEditando, setDiaEditando] = useState<CycleLogLocal | null>(null);
   const [procesando, setProcesando] = useState(false);
+
+  // color rojo "cozy" para menstruación (no toca globals.css)
+  const ROJO_PERIODO = '#c2453a';
+  const ROJO_PERIODO_SOMBRA = '#93342b';
+
+  const FASE_ICONO: Record<string, { Icono: typeof Droplet; color: string }> = {
+    periodo: { Icono: Droplet, color: ROJO_PERIODO },
+    periodo_predicho: { Icono: Droplet, color: ROJO_PERIODO },
+    folicular: { Icono: Sprout, color: 'var(--color-sage)' },
+    ventana_fertil: { Icono: Heart, color: 'var(--color-gold)' },
+    ovulacion: { Icono: Egg, color: 'var(--color-gold)' },
+    fase_lutea: { Icono: Moon, color: 'var(--color-wood)' },
+  };
 
   const cargarTodo = useCallback(async () => {
     if (!ownerId) return;
@@ -259,9 +272,14 @@ export default function CicloPage() {
               const esHoy = isSameDay(dia, ahoraEcuador());
               const logDia = logExistenteEnDia(dia);
               const fase = fasePorDia(dia);
+              const visualFase = fase ? FASE_ICONO[fase.fase] : null;
 
               let claseCirculo = 'text-[var(--color-text)] hover:bg-[var(--color-surface)]';
-              if (logDia) claseCirculo = 'bg-[var(--color-primary)] text-[var(--color-text-inverse)] font-bold shadow-[0_2px_0_var(--color-primary-hover)]';
+              let estiloCirculo: React.CSSProperties = {};
+              if (logDia) {
+                claseCirculo = 'font-bold text-[var(--color-text-inverse)]';
+                estiloCirculo = { backgroundColor: ROJO_PERIODO, boxShadow: `0 2px 0 ${ROJO_PERIODO_SOMBRA}` };
+              }
 
               return (
                 <button
@@ -269,21 +287,31 @@ export default function CicloPage() {
                   onClick={() => handleClickDia(dia)}
                   disabled={esEspectador}
                   title={fase ? NOMBRES_FASE[fase.fase] : undefined}
+                  style={estiloCirculo}
                   className={`relative flex aspect-square flex-col items-center justify-center rounded-full text-xs transition-transform active:scale-90 ${
                     dentroDelMes ? '' : 'opacity-30'
                   } ${esHoy && !logDia ? 'ring-2 ring-[var(--color-gold)]' : ''} ${claseCirculo}`}
                 >
                   <span>{format(dia, 'd')}</span>
-                  {!logDia && fase && <span className="absolute -bottom-0.5 text-[9px]">{ICONOS_FASE[fase.fase]}</span>}
+                  {!logDia && visualFase && (
+                    <span className="absolute -bottom-0.5">
+                      <visualFase.Icono size={9} style={{ color: visualFase.color }} strokeWidth={2.5} />
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 border-t-2 border-dashed border-[var(--color-border)] px-3 py-2.5 text-[10px] text-[var(--color-text-muted)]">
-            <span>🩸 Registrado</span>
-            <span>{ICONOS_FASE.periodo_predicho} Predicho</span>
-            <span>{ICONOS_FASE.ventana_fertil} Fértil</span>
-            <span>{ICONOS_FASE.ovulacion} Ovulación</span>
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5 border-t-2 border-dashed border-[var(--color-border)] px-3 py-2.5 text-[10px] text-[var(--color-text-muted)]">
+            <span className="flex items-center gap-1">
+              <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ROJO_PERIODO }} />
+              Registrado
+            </span>
+            <span className="flex items-center gap-1"><Droplet size={11} style={{ color: ROJO_PERIODO }} /> Predicho</span>
+            <span className="flex items-center gap-1"><Heart size={11} className="text-[var(--color-gold)]" /> Fértil</span>
+            <span className="flex items-center gap-1"><Egg size={11} className="text-[var(--color-gold)]" /> Ovulación</span>
+            <span className="flex items-center gap-1"><Sprout size={11} className="text-[var(--color-sage)]" /> Folicular</span>
+            <span className="flex items-center gap-1"><Moon size={11} className="text-[var(--color-wood)]" /> Lútea</span>
           </div>
         </div>
       </div>

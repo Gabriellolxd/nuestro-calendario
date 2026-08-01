@@ -20,7 +20,8 @@ type Props = {
 export default function CicloDiaModal({ log, onClose, onGuardar, onEliminar }: Props) {
   const [sintomas, setSintomas] = useState<string[]>(log.symptoms ?? []);
   const [notas, setNotas] = useState(log.notes ?? '');
-  const [luteal, setLuteal] = useState(log.luteal_length_manual ? String(log.luteal_length_manual) : '');
+  //Esta linea de abajo se deberia quitar pq no se usa. Pero no he topado todavia para no dañar nada de la logica
+  const [luteal] = useState(log.luteal_length_manual ? String(log.luteal_length_manual) : '');
   const [cargando, setCargando] = useState(false);
 
   function alternar(s: string) {
@@ -84,19 +85,6 @@ export default function CicloDiaModal({ log, onClose, onGuardar, onEliminar }: P
             onChange={(e) => setNotas(e.target.value)}
             rows={2}
             className="mb-3 w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
-          />
-
-          <label className="mb-1 block text-xs font-medium text-[var(--color-text-muted)]">
-            Duración fase lútea (opcional, si tienes test de ovulación)
-          </label>
-          <input
-            type="number"
-            min={8}
-            max={20}
-            value={luteal}
-            onChange={(e) => setLuteal(e.target.value)}
-            placeholder="Ej. 14"
-            className="mb-1 w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
           />
         </div>
 

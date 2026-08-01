@@ -5,12 +5,14 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { LogOut, Link2, Droplet } from 'lucide-react';
+import { LogOut, Link2, Droplet, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ThemeSwitcher from './ThemeSwitcher';
+import NotificacionesCalendariosModal from './NotificacionesCalendariosModal';
 
 export default function PerfilMenu() {
   const [abierto, setAbierto] = useState(false);
+  const [mostrarNotifModal, setMostrarNotifModal] = useState(false);
   const contenedorRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -65,6 +67,14 @@ export default function PerfilMenu() {
             Compartir calendario
           </Link>
 
+          <button
+            onClick={() => { setMostrarNotifModal(true); setAbierto(false); }}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface)]"
+          >
+            <Bell size={16} className="text-[var(--color-primary)]" />
+            Notificaciones
+          </button>
+
           <div className="my-1 border-t border-[var(--color-border)]" />
           <ThemeSwitcher />
           <div className="my-1 border-t border-[var(--color-border)]" />
@@ -78,6 +88,7 @@ export default function PerfilMenu() {
           </button>
         </div>
       )}
+      {mostrarNotifModal && <NotificacionesCalendariosModal onClose={() => setMostrarNotifModal(false)} />}
     </div>
   );
 }

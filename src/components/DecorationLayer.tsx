@@ -311,6 +311,20 @@ export default function DecorationLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placements, notas, fantasma, sobreBasurero]);
 
+  // Deseleccionar al tocar fuera de cualquier sticker/nota — el contenedor
+  // interno tiene pointer-events-none, así que su propio onClick nunca
+  // captura clics "afuera"; se necesita un listener global.
+  useEffect(() => {
+    function onGlobalPointerDown(e: PointerEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-deco-item]')) {
+        setSeleccionId(null);
+      }
+    }
+    window.addEventListener('pointerdown', onGlobalPointerDown);
+    return () => window.removeEventListener('pointerdown', onGlobalPointerDown);
+  }, []);
+
   async function handleEditarNota(id: string, contenido: string) {
     setNotas((prev) => prev.map((n) => (n.id === id ? { ...n, contenido } : n)));
     await actualizarNotaLocal(id, { contenido });
@@ -342,7 +356,7 @@ export default function DecorationLayer({
               className="pointer-events-none absolute"
               style={{ left: `${p.pos_x}%`, top: `${p.pos_y}%`, zIndex: seleccionado ? 50 : p.z_index }}
             >
-              <div
+              <div data-deco-item
                 className="pointer-events-auto relative animate-[stickerPop_0.25s_ease-out]"
                 style={{
                   transform: `translate(-50%, -50%) rotate(${p.rotacion}deg) scale(${p.escala})`,
@@ -400,7 +414,7 @@ export default function DecorationLayer({
                 style={{ transform: `translate(-50%, -50%) rotate(${n.rotacion}deg)` }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div
+                <div data-deco-item
                   onPointerDown={(e) => onPointerDownItem('nota', n.id, e)}
                   className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 cursor-grab touch-none select-none text-lg active:cursor-grabbing"
                   title="Arrastra el alfiler para mover la nota"
