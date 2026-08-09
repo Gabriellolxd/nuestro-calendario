@@ -6,7 +6,8 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        registerPlugin(DeviceSetupPlugin.class);
         super.onCreate(savedInstanceState);
+        // IMPORTANTE: registerPlugin debe ir DESPUÉS de super.onCreate
+        registerPlugin(DeviceSetupPlugin.class);
     }
 }
