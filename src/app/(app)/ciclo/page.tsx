@@ -31,7 +31,7 @@ function fechaLegible(iso: string, patron = 'd MMM yyyy'): string {
 }
 
 export default function CicloPage() {
-  const { calendarioActivo, cargando: cargandoContexto } = useCalendarioActivo();
+  const { calendarioActivo, cargando: cargandoContexto, primerSyncCompleto } = useCalendarioActivo();
   const ownerId = calendarioActivo?.ownerId ?? null;
   const esEspectador = calendarioActivo?.rol === 'espectador';
   const router = useRouter();
@@ -154,7 +154,7 @@ export default function CicloPage() {
     subirCambiosPendientes().catch((err) => console.error('Error sincronizando:', err));
   }
 
-  if (cargandoContexto || !ownerId) {
+  if (cargandoContexto || !ownerId || !primerSyncCompleto) {
     return <PantallaCarga />;
   }
 

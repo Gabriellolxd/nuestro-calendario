@@ -14,6 +14,7 @@ export type EventoBase = {
   hora_fin: string;
   tipo_recurrencia: TipoRecurrencia;
   minutos_aviso: number;
+  tono_notificacion: string;
 };
 
 export type Excepcion = {

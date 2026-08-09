@@ -9,6 +9,7 @@ git push -u origin main
 -- Para actualizar APK y Android Studio --
 npm run build:capacitor
 npx cap sync android
+npx cap open android
 
 Luego en Android Studio: Build → Generate Signed Bundle/APK, mismo keystore que ya creaste 
 (así Android lo reconoce como "actualización" y no pierdes los datos locales — 

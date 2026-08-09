@@ -24,6 +24,7 @@ type ContextoCalendario = {
   ultimaSync: Date | null;
   syncTick: number; // se incrementa tras cada intento de sync — las páginas lo usan como señal para recargar sus datos locales
   sincronizarAhora: () => Promise<void>;
+  primerSyncCompleto: boolean;
 };
 
 const Contexto = createContext<ContextoCalendario | null>(null);
@@ -36,7 +37,8 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
   const [estadoSync, setEstadoSync] = useState<EstadoSync>('idle');
   const [ultimaSync, setUltimaSync] = useState<Date | null>(null);
   const [syncTick, setSyncTick] = useState(0);
-  const router = useRouter();
+  const router = useRouter(); 
+  const [primerSyncCompleto, setPrimerSyncCompleto] = useState(false);
 
   // Evita sync solapados si el usuario toca el botón varias veces seguidas
   // o si dos disparadores (intervalo + visibilitychange) coinciden.
@@ -97,6 +99,7 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
     } finally {
       sincronizandoRef.current = false;
       setSyncTick((t) => t + 1);
+      setPrimerSyncCompleto(true); // aunque falle, no queremos bloquear la app para siempre
     }
   }, [calendarioActivo]);
 
@@ -147,6 +150,7 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
         ultimaSync,
         syncTick,
         sincronizarAhora,
+        primerSyncCompleto,
       }}
     >
       {children}

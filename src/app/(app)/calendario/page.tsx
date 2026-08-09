@@ -1,7 +1,7 @@
 // src/app/(app)/calendario/page.tsx
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Palette, StickyNote as StickyNoteIcon, Droplet, Sprout, Heart, Egg, Moon, Leaf } from 'lucide-react';
 import PerfilMenu from '@/components/PerfilMenu';
 import SelectorCalendario from '@/components/SelectorCalendario';
@@ -63,7 +63,7 @@ const FASE_VISUAL: Record<string, { Icono: typeof Droplet; color: string; nombre
 };
 
 export default function CalendarioPage() {
-  const { userId, calendarioActivo, cargando: cargandoContexto, opciones } = useCalendarioActivo();  const ownerId = calendarioActivo?.ownerId ?? null;
+  const { userId, calendarioActivo, cargando: cargandoContexto, opciones, primerSyncCompleto } = useCalendarioActivo();  const ownerId = calendarioActivo?.ownerId ?? null;
   const esEspectador = calendarioActivo?.rol === 'espectador';
 
   const [vista, setVista] = useState<Vista>('mes');
@@ -88,6 +88,7 @@ export default function CalendarioPage() {
 
   const diasMes = getMonthGrid(fechaAncla);
   const diasSemana = getWeekGrid(fechaAncla);
+  const inicioSwipe = useRef<{ x: number; y: number } | null>(null);
 
   let rangoInicio: Date;
   let rangoFin: Date;
@@ -230,6 +231,28 @@ export default function CalendarioPage() {
     else setFechaAncla((f) => addDays(f, 1));
   }
 
+  const UMBRAL_SWIPE_PX = 50;
+
+  function manejarSwipeInicio(e: React.TouchEvent) {
+    const t = e.touches[0];
+    inicioSwipe.current = { x: t.clientX, y: t.clientY };
+  }
+
+  function manejarSwipeFin(e: React.TouchEvent) {
+    if (!inicioSwipe.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - inicioSwipe.current.x;
+    const dy = t.clientY - inicioSwipe.current.y;
+    inicioSwipe.current = null;
+
+    // Solo cuenta como swipe horizontal si el movimiento lateral domina
+    // claramente sobre el vertical — evita confundirlo con scroll normal.
+    if (Math.abs(dx) < UMBRAL_SWIPE_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+
+    if (dx > 0) irAnterior();
+    else irSiguiente();
+  }
+
   function tituloEncabezado(): string {
     if (vista === 'mes') return format(fechaAncla, 'MMMM yyyy', { locale: es });
     if (vista === 'semana') {
@@ -259,7 +282,7 @@ export default function CalendarioPage() {
     return calcularFaseDia(format(dia, 'yyyy-MM-dd'), logsParaFases, prediccionParaFases);
   }
 
-  if (cargandoContexto || !userId || !ownerId) {
+  if (cargandoContexto || !userId || !ownerId || !primerSyncCompleto) {
     return <PantallaCarga />;
   }
 
@@ -336,7 +359,7 @@ export default function CalendarioPage() {
         <SelectorCalendario />
       </div>
 
-      <div className="px-2 pt-2">
+      <div className="px-2 pt-2" onTouchStart={manejarSwipeInicio} onTouchEnd={manejarSwipeFin}>
         {vista === 'mes' && ownerId && (
           <div className="relative panel-madera overflow-hidden">
             <VistaMes

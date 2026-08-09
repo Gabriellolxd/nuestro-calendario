@@ -20,6 +20,7 @@ export interface EventoLocal {
   synced: number;
   origen_offline: number;
   minutos_aviso: number;
+  tono_notificacion: string;
 }
 
 export interface ExcepcionLocal {

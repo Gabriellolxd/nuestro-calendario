@@ -6,6 +6,7 @@ import { ahoraEcuador, format } from './dates';
 import { proyectarEventos, type EventoBase, type Excepcion } from './recurrence';
 import { obtenerCalendariosSilenciados } from './notificationPrefs';
 import { obtenerEventosYExcepcionesRemoto } from './notificationsRemoto';
+import { TONOS_NOTIFICACION } from './notificationTones';
 
 function esNativo(): boolean {
   return Capacitor.isNativePlatform();
@@ -23,14 +24,18 @@ function idParaOcurrencia(eventoId: string, fechaStr: string): number {
   return hashANumero(`oc-${eventoId}-${fechaStr}`);
 }
 
-const CHANNEL_ID = 'eventos-nuestro-calendario-v2';
-const NOMBRE_ARCHIVO_SONIDO = 'notificacion_evento.wav';
+// Un canal de Android por cada tono disponible — es la única forma real
+// de que sonidos distintos por evento funcionen en Android 8+, porque el
+// sistema ata el sonido al CANAL, no a cada notificación individual.
+function idCanalParaTono(tonoId: string): string {
+  return `eventos-nc-${tonoId}`;
+}
+
 const VENTANA_DIAS = 60;
-const MAX_NOTIFICACIONES = 50; // Límite de seguridad para Android
+const MAX_NOTIFICACIONES = 50;
 
 let permisoVerificado = false;
 
-// Comprueba los permisos de forma segura antes de realizar cualquier llamada a la API nativa
 async function asegurarPermisos(): Promise<boolean> {
   if (!esNativo()) return false;
   if (permisoVerificado) return true;
@@ -56,17 +61,24 @@ export async function solicitarPermisoNotificaciones() {
     const concedido = await asegurarPermisos();
     if (!concedido) return;
 
-    await LocalNotifications.createChannel({
-      id: CHANNEL_ID,
-      name: 'Eventos del calendario',
-      description: 'Avisos de eventos de nuestro-calendario',
-      importance: 5,
-      sound: NOMBRE_ARCHIVO_SONIDO,
-      visibility: 1,
-      vibration: true,
-    });
+    // Crea UN canal por cada tono — cada uno con su propio sonido fijo.
+    for (const tono of TONOS_NOTIFICACION) {
+      try {
+        await LocalNotifications.createChannel({
+          id: idCanalParaTono(tono.id),
+          name: `Eventos — ${tono.nombre}`,
+          description: 'Avisos de eventos de nuestro-calendario',
+          importance: 5,
+          sound: tono.archivo,
+          visibility: 1,
+          vibration: true,
+        });
+      } catch (err) {
+        console.error(`Error creando canal para tono ${tono.id}:`, err);
+      }
+    }
   } catch (err) {
-    console.error('Error solicitando permiso / creando canal:', err);
+    console.error('Error solicitando permiso / creando canales:', err);
   }
 }
 
@@ -79,16 +91,14 @@ type NotifProgramada = {
   schedule: { at: Date; allowWhileIdle: boolean };
 };
 
-type DatosCalendario = { ownerId: string; eventos: EventoBase[]; excepciones: Excepcion[] };
+export type DatosCalendario = { ownerId: string; eventos: EventoBase[]; excepciones: Excepcion[] };
 
 export async function reprogramarNotificacionesCalendarios(calendarios: DatosCalendario[]) {
   if (!esNativo()) return;
 
-  // VERIFICACIÓN DE SEGURIDAD CRÍTICA:
-  // Si no hay permisos, abortamos inmediatamente ANTES de tocar el plugin nativo.
   const tienePermiso = await asegurarPermisos();
   if (!tienePermiso) {
-    console.warn('Reprogramación omitida: Permiso de notificaciones denegado o no otorgado.');
+    console.warn('Reprogramación omitida: permiso de notificaciones no otorgado.');
     return;
   }
 
@@ -108,30 +118,31 @@ export async function reprogramarNotificacionesCalendarios(calendarios: DatosCal
       }
 
       const minutosAvisoPorId = new Map(cal.eventos.map((e) => [e.id, e.minutos_aviso]));
+      const tonoPorId = new Map(cal.eventos.map((e) => [e.id, e.tono_notificacion]));
 
       for (const oc of ocurrencias) {
         const minutosAviso = minutosAvisoPorId.get(oc.eventoId) ?? 5;
         const disparo = new Date(oc.hora_inicio.getTime() - minutosAviso * 60000);
         if (disparo.getTime() <= Date.now()) continue;
-
         if (aProgramar.length >= MAX_NOTIFICACIONES) break;
 
         const fechaStr = format(oc.fecha, 'yyyy-MM-dd');
         const id = idParaOcurrencia(oc.eventoId, fechaStr);
         idsValidos.add(id);
 
+        const tonoId = tonoPorId.get(oc.eventoId) ?? 'notificacion_evento';
+
         aProgramar.push({
           id,
           title: oc.titulo || 'Evento',
           body: 'Toca para ver el detalle en nuestro-calendario',
-          channelId: CHANNEL_ID,
+          channelId: idCanalParaTono(tonoId),
           smallIcon: 'ic_stat_name',
           schedule: { at: disparo, allowWhileIdle: true },
         });
       }
     }
 
-    // Cada paso nativo se aísla con try/catch individual
     let pendientes;
     try {
       pendientes = await LocalNotifications.getPending();
@@ -164,15 +175,25 @@ export async function reprogramarNotificacionesCalendarios(calendarios: DatosCal
   }
 }
 
-export async function reprogramarNotificacionesDeUsuario(opciones: { ownerId: string }[]) {
+export async function reprogramarNotificacionesDeUsuario(
+  opciones: { ownerId: string }[],
+  // Datos ya frescos que NO deben volver a leerse de Supabase — se usan
+  // para el calendario que se acaba de editar en este mismo dispositivo,
+  // evitando la condición de carrera con el push que aún no terminó.
+  overrides?: DatosCalendario[]
+) {
   if (!esNativo()) return;
   try {
     const silenciados = obtenerCalendariosSilenciados();
     const activos = opciones.filter((o) => !silenciados.includes(o.ownerId));
     if (activos.length === 0) return;
 
+    const overridesPorId = new Map((overrides ?? []).map((o) => [o.ownerId, o]));
+
     const datos = await Promise.all(
       activos.map(async (o) => {
+        const override = overridesPorId.get(o.ownerId);
+        if (override) return override;
         try {
           const { eventos, excepciones } = await obtenerEventosYExcepcionesRemoto(o.ownerId);
           return { ownerId: o.ownerId, eventos, excepciones };
@@ -186,5 +207,15 @@ export async function reprogramarNotificacionesDeUsuario(opciones: { ownerId: st
     await reprogramarNotificacionesCalendarios(datos);
   } catch (err) {
     console.error('Error en reprogramarNotificacionesDeUsuario:', err);
+  }
+}
+
+export async function estaPermisoNotificacionesConcedido(): Promise<boolean> {
+  if (!esNativo()) return false;
+  try {
+    const check = await LocalNotifications.checkPermissions();
+    return check.display === 'granted';
+  } catch {
+    return false;
   }
 }

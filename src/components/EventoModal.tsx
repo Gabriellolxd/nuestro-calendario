@@ -16,6 +16,8 @@ import {
 import { subirCambiosPendientes } from '@/lib/sync';
 import { reprogramarNotificacionesDeUsuario } from '@/lib/notifications';
 import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
+import { TONOS_NOTIFICACION } from '@/lib/notificationTones';
+import { obtenerEventosLocal, obtenerExcepcionesLocal } from '@/lib/localData';
 
 type ModoEdicion = {
   ocurrencia: Ocurrencia;
@@ -63,6 +65,9 @@ export default function EventoModal({
     edicion?.eventoOriginal.tipo_recurrencia ?? 'none'
   );
   const [minutosAviso, setMinutosAviso] = useState(edicion?.eventoOriginal.minutos_aviso ?? 5);
+  const [tonoNotificacion, setTonoNotificacion] = useState(
+    edicion?.eventoOriginal.tono_notificacion ?? 'notificacion_evento'
+  );
   const [alcance, setAlcance] = useState<'unica' | 'serie'>('unica');
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
@@ -70,13 +75,25 @@ export default function EventoModal({
   const colorInputRef = useRef<HTMLInputElement>(null);
   const esColorPredefinido = PALETA_COLORES.some((c) => c.hex.toLowerCase() === color.toLowerCase());
 
-  function despuesDeGuardar() {
+  async function despuesDeGuardar() {
     onGuardado();
     onClose();
     subirCambiosPendientes().catch((err) => console.error('Error sincronizando:', err));
-    reprogramarNotificacionesDeUsuario(opciones).catch((err) =>
-      console.error('Error reprogramando notificaciones:', err)
-    );
+
+    // Usa los datos LOCALES recién guardados (ya reflejan el cambio de
+    // inmediato) para el calendario que se acaba de editar, en vez de
+    // esperar a que la subida a Supabase termine para poder leerlo de
+    // vuelta — eso es justo lo que causaba la condición de carrera.
+    try {
+      const eventosLocal = await obtenerEventosLocal(userId);
+      const idsLocal = eventosLocal.map((e) => e.id);
+      const excepcionesLocal = await obtenerExcepcionesLocal(idsLocal);
+      reprogramarNotificacionesDeUsuario(opciones, [
+        { ownerId: userId, eventos: eventosLocal, excepciones: excepcionesLocal },
+      ]).catch((err) => console.error('Error reprogramando notificaciones:', err));
+    } catch (err) {
+      console.error('Error preparando datos locales para notificaciones:', err);
+    }
   }
 
   async function handleGuardar(e: React.FormEvent) {
@@ -112,6 +129,7 @@ export default function EventoModal({
           change_uuid: crypto.randomUUID(),
           client_updated_at: ahora,
           deleted_at: null,
+          tono_notificacion: tonoNotificacion,
         });
       } else if (!esRecurrente || alcance === 'serie') {
         await actualizarEventoLocal(edicion.eventoOriginal.id, {
@@ -125,6 +143,7 @@ export default function EventoModal({
           device_id: deviceId,
           change_uuid: crypto.randomUUID(),
           client_updated_at: ahora,
+          tono_notificacion: tonoNotificacion,
         });
       } else {
         const fechaClave = format(edicion.ocurrencia.fecha, 'yyyy-MM-dd');
@@ -144,7 +163,7 @@ export default function EventoModal({
         });
       }
 
-      despuesDeGuardar();
+      await despuesDeGuardar();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar el evento.');
     } finally {
@@ -180,7 +199,7 @@ export default function EventoModal({
         });
       }
 
-      despuesDeGuardar();
+      await despuesDeGuardar();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al eliminar el evento.');
     } finally {
@@ -342,6 +361,22 @@ export default function EventoModal({
                   <option value={30}>30 minutos antes</option>
                   <option value={60}>1 hora antes</option>
                   <option value={1440}>1 día antes</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)]">
+                  <Bell size={13} />
+                  Tono de notificación
+                </label>
+                <select
+                  value={tonoNotificacion}
+                  onChange={(e) => setTonoNotificacion(e.target.value)}
+                  className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+                >
+                  {TONOS_NOTIFICACION.map((t) => (
+                    <option key={t.id} value={t.id}>{t.nombre}</option>
+                  ))}
                 </select>
               </div>
 

@@ -32,6 +32,7 @@ export async function obtenerEventosLocal(userId: string): Promise<EventoBase[]>
     hora_fin: e.hora_fin,
     tipo_recurrencia: e.tipo_recurrencia,
     minutos_aviso: e.minutos_aviso,
+    tono_notificacion: e.tono_notificacion,
   }));
 }
 
