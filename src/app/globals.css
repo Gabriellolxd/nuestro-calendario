@@ -35,6 +35,8 @@
   --sombra-panel: 0 3px 0 var(--color-wood-dark), 0 8px 18px rgba(92, 58, 38, 0.25);
   --sombra-panel-suave: 0 2px 0 var(--color-border), 0 4px 10px rgba(92, 58, 38, 0.14);
   --brillo-interior: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+
+  --color-leather: #5c3a2e;
 }
 
 [data-theme='dark'] {
@@ -68,6 +70,8 @@
   --sombra-panel: 0 3px 0 #1a1108, 0 10px 22px rgba(0, 0, 0, 0.45);
   --sombra-panel-suave: 0 2px 0 #1a1108, 0 6px 14px rgba(0, 0, 0, 0.35);
   --brillo-interior: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  --color-leather: #3d2519;
 }
 
 html {

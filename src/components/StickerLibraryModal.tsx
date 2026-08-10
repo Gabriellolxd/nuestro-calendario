@@ -2,24 +2,24 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { X, Upload, Trash2 } from 'lucide-react';
 import {
   obtenerStickersLocal,
   crearStickerLocal,
   eliminarStickerLocal,
   urlParaSticker,
   subirStickersPendientes,
-} from '../lib/stickersLocal';
-import { STICKERS_PREDEFINIDOS } from '../lib/stickersPredefinidos';
-import type { StickerAssetLocal } from '../lib/db';
+} from '@/lib/stickersLocal';
+import type { StickerAssetLocal } from '@/lib/db';
 
 type Props = {
   userId: string;
-  idsCalendariosVisibles: string[]; // tu id + el de tu pareja si está vinculada
-  onElegirParaColocar?: (assetId: string) => void;
+  idsCalendariosVisibles: string[];
   onClose: () => void;
+  onElegirParaColocar?: (assetId: string) => void;
 };
 
-export default function StickerLibraryModal({ userId, idsCalendariosVisibles, onClose, onElegirParaColocar }: Props) {  
+export default function StickerLibraryModal({ userId, idsCalendariosVisibles, onClose, onElegirParaColocar }: Props) {
   const [stickers, setStickers] = useState<StickerAssetLocal[]>([]);
   const [cargando, setCargando] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
@@ -46,18 +46,14 @@ export default function StickerLibraryModal({ userId, idsCalendariosVisibles, on
       const { tieneTransparencia } = await import('@/lib/stickerBorder');
       const transparente = await tieneTransparencia(archivo);
       if (!transparente) {
-        const continuar = confirm(
-          'Esta imagen no tiene fondo transparente — el borde blanco va a salir como un cuadrado en vez de seguir la forma. ¿Quieres subirla igual?'
-        );
+        const continuar = confirm('Esta imagen no tiene fondo transparente — el borde blanco saldrá cuadrado. ¿Subirla igual?');
         if (!continuar) {
           if (inputRef.current) inputRef.current.value = '';
           return;
         }
       }
     } else {
-      const continuar = confirm(
-        'Este formato (JPG u otro) no soporta transparencia — el borde blanco va a salir como un cuadrado en vez de seguir la forma. ¿Quieres subirla igual?'
-      );
+      const continuar = confirm('Este formato no soporta transparencia — el borde saldrá cuadrado. ¿Subirla igual?');
       if (!continuar) {
         if (inputRef.current) inputRef.current.value = '';
         return;
@@ -78,71 +74,60 @@ export default function StickerLibraryModal({ userId, idsCalendariosVisibles, on
   }
 
   async function handleEliminar(sticker: StickerAssetLocal) {
-    if (sticker.owner_user_id !== userId) return;
+    if (sticker.owner_user_id !== userId || sticker.es_predefinido) return;
     await eliminarStickerLocal(sticker.id);
     await cargar();
-    subirStickersPendientes().catch((err) => console.error('Error sincronizando borrado:', err));
+    subirStickersPendientes().catch((err) => console.error('Error sincronizando:', err));
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
-      <div className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-4 text-base font-semibold text-gray-800">🎨 Mis stickers (prueba)</h2>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[var(--color-wood-dark)]/50 px-4" onClick={onClose}>
+      <div className="panel-madera flex max-h-[80vh] w-full max-w-md animar-entrada flex-col p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-base font-semibold text-[var(--color-text)]">Mis stickers</h2>
+          <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-[var(--color-surface)]">
+            <X size={16} />
+          </button>
+        </div>
 
         <input ref={inputRef} type="file" accept="image/*" onChange={handleArchivo} className="hidden" id="input-sticker" />
         <label
           htmlFor="input-sticker"
-          className="mb-4 flex cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-pink-300 py-4 text-sm text-pink-500 hover:bg-pink-50"
+          className="mb-4 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--color-primary)] py-4 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
         >
-          {subiendo ? 'Procesando...' : '+ Subir nuevo sticker'}
+          <Upload size={16} />
+          {subiendo ? 'Procesando...' : 'Subir nuevo sticker'}
         </label>
 
-        {cargando && <p className="text-sm text-gray-400">Cargando...</p>}
-
-        {STICKERS_PREDEFINIDOS.length > 0 && (
-          <>
-            <p className="mb-2 text-xs font-medium text-gray-500">Predefinidos</p>
-            <div className="mb-4 grid grid-cols-4 gap-2">
-              {STICKERS_PREDEFINIDOS.map((s) => (
-                <div key={s.id} className="rounded-lg p-1">
-                  <img src={s.archivo} alt={s.nombre} className="aspect-square w-full object-contain" />
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        <p className="mb-2 text-xs font-medium text-gray-500">Tu librería ({stickers.length})</p>
-        <div className="grid grid-cols-4 gap-2">
-          {stickers.map((s) => (
-            <div key={s.id} className="relative">
-              <button
-                onClick={() => (onElegirParaColocar ? onElegirParaColocar(s.id) : undefined)}
-                className="w-full rounded-lg p-1 hover:bg-gray-100"
-              >
-                <img src={urlParaSticker(s)} alt={s.nombre} className="aspect-square w-full object-contain" />
-              </button>
-              {s.owner_user_id === userId && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {cargando && <p className="text-sm text-[var(--color-text-muted)]">Cargando...</p>}
+          <div className="grid grid-cols-4 gap-2">
+            {stickers.map((s) => (
+              <div key={s.id} className="relative">
                 <button
-                  onClick={() => handleEliminar(s)}
-                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white"
-                  aria-label="Eliminar"
+                  onClick={() => onElegirParaColocar?.(s.id)}
+                  className="w-full rounded-lg border-2 border-transparent p-1 hover:border-[var(--color-border)] hover:bg-[var(--color-surface)]"
                 >
-                  ×
+                  <img src={urlParaSticker(s)} alt={s.nombre} className="aspect-square w-full object-contain" />
                 </button>
-              )}
-              {s.synced === 0 && (
-                <span className="absolute bottom-0 left-0 rounded bg-amber-400 px-1 text-[8px] text-white">
-                  pendiente
-                </span>
-              )}
-            </div>
-          ))}
+                {s.owner_user_id === userId && !s.es_predefinido && (
+                  <button
+                    onClick={() => handleEliminar(s)}
+                    className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-danger)] text-[10px] text-white"
+                    aria-label="Eliminar"
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                )}
+                {s.synced === 0 && (
+                  <span className="absolute bottom-0 left-0 rounded bg-[var(--color-gold)] px-1 text-[8px] text-[var(--color-wood-dark)]">
+                    pendiente
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-
-        <button onClick={onClose} className="mt-5 w-full rounded-lg border border-gray-300 py-2 text-sm text-gray-600">
-          Cerrar
-        </button>
       </div>
     </div>
   );

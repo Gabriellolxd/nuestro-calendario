@@ -39,7 +39,8 @@ import StickerLibraryModal from '@/components/StickerLibraryModal';
 import { obtenerStickersLocal, colocarStickerLocal, subirStickersPendientes, descargarStickersDesdeNube } from '@/lib/stickersLocal';
 import { crearNotaLocal, subirNotasPendientes, descargarNotasDesdeNube } from '@/lib/notesLocal';
 import type { StickerAssetLocal } from '@/lib/db';
-import StickerTray from '@/components/StickerTray';
+import StickerBook from '@/components/StickerBook';
+import { registrarStickersPredefinidos } from '@/lib/stickersLocal';
 import PantallaCarga from '@/components/PantallaCarga';
 
 const MAX_CHIPS_MES = 4;
@@ -164,7 +165,9 @@ export default function CalendarioPage() {
   useEffect(() => {
     if (!ownerId || !userId) return;
     const ids = [userId, ownerId].filter((v, i, arr) => arr.indexOf(v) === i);
-    obtenerStickersLocal(ids).then(setStickerAssets);
+    registrarStickersPredefinidos(userId).then(() => {
+      obtenerStickersLocal(ids).then(setStickerAssets);
+    });
     descargarStickersDesdeNube(ids, ownerId);
     descargarNotasDesdeNube(ownerId);
   }, [userId, ownerId, syncTick]);
@@ -439,31 +442,23 @@ export default function CalendarioPage() {
       )}
 
       {modoDecorar && !esEspectador && (
-        <>
-          <button
-            onClick={async () => {
-              if (!userId || !ownerId) return;
-              await crearNotaLocal({
-                calendarioOwnerId: ownerId,
-                colocadoPorUserId: userId,
-                targetType: 'mes',
-                targetMes: format(fechaAncla, 'yyyy-MM'),
-              });
-              setDecoTick((t) => t + 1);
-              subirNotasPendientes().catch((err) => console.error(err));
-            }}
-            className="boton-tallado fixed bottom-24 left-6 z-40 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-gold)]"
-            aria-label="Agregar nota"
-          >
-            <StickyNoteIcon size={19} strokeWidth={2.5} />
-          </button>
-          <StickerTray
-            stickers={stickerAssets}
-            onAbrirLibreria={() => setMostrarLibreriaStickers(true)}
-            onIniciarArrastreDesdeTray={(assetId, x, y) => setArrastreTray({ assetId, x, y })}
-            onCerrar={() => setModoDecorar(false)}
-          />
-        </>
+        <StickerBook
+          stickers={stickerAssets}
+          onAbrirLibreria={() => setMostrarLibreriaStickers(true)}
+          onAgregarNota={async () => {
+            if (!userId || !ownerId) return;
+            await crearNotaLocal({
+              calendarioOwnerId: ownerId,
+              colocadoPorUserId: userId,
+              targetType: 'mes',
+              targetMes: format(fechaAncla, 'yyyy-MM'),
+            });
+            setDecoTick((t) => t + 1);
+            subirNotasPendientes().catch((err) => console.error(err));
+          }}
+          onIniciarArrastreDesdeTray={(assetId, x, y) => setArrastreTray({ assetId, x, y })}
+          onCerrarModoDecorar={() => setModoDecorar(false)}
+        />
       )}
 
       {mostrarLibreriaStickers && userId && ownerId && (
