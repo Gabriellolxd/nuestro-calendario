@@ -8,6 +8,7 @@ import { Mail, Lock, Coffee } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { ensureDeviceRegistered } from '@/lib/device';
 import { setPreferenciaRecordarme } from '@/lib/supabase';
+import PasswordInput from '@/components/PasswordInput';
 
 export default function LoginPage() {
   const [modo, setModo] = useState<'login' | 'registro'>('login');
@@ -77,18 +78,7 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="relative">
-            <Lock size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-            <input
-              type="password"
-              placeholder="Contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] py-2.5 pl-10 pr-4 text-[var(--color-text)] outline-none transition-colors placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)]"
-            />
-          </div>
+          <PasswordInput value={password} onChange={setPassword} required minLength={6} />
 
           <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
             <input

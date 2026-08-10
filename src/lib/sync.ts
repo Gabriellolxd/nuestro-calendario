@@ -70,7 +70,10 @@ export async function subirCambiosPendientes(): Promise<{ huboConflictos: boolea
       body: JSON.stringify({ cambios }),
     });
   } catch (err) {
-    const msg = 'No se pudo conectar con el servidor. Revisa tu conexión a internet.';
+    // Muestra el error REAL del navegador (CORS, DNS, conexión rechazada,
+    // etc.) en vez de un mensaje genérico — así sabemos qué pasa de verdad.
+    const detalle = err instanceof Error ? err.message : String(err);
+    const msg = `Fallo de red hacia ${apiBase || '(mismo origen)'}/api/sync — ${detalle}`;
     registrarErrorSync(msg);
     throw new Error(msg);
   }

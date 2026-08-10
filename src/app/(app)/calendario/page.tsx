@@ -418,8 +418,7 @@ export default function CalendarioPage() {
       {!esEspectador && (
         <button
           onClick={() => abrirModalParaCrear(vista === 'mes' ? ahoraEcuador() : fechaAncla)}
-          className="boton-tallado fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-text-inverse)]"
-          aria-label="Nuevo evento"
+          className="boton-tallado fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-text-inverse)]"          aria-label="Nuevo evento"
         >
           <Plus size={26} strokeWidth={2.5} />
         </button>
@@ -428,7 +427,7 @@ export default function CalendarioPage() {
       {!esEspectador && vista === 'mes' && (
         <button
           onClick={() => setModoDecorar((v) => !v)}
-          className={`boton-tallado fixed bottom-24 right-6 flex h-12 w-12 items-center justify-center rounded-full ${
+          className={`boton-tallado fixed bottom-24 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full ${
             modoDecorar
               ? 'bg-[var(--color-sage)] text-[var(--color-text-inverse)]'
               : 'border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-sage)]'

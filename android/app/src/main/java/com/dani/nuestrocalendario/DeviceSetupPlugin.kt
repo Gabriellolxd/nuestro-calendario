@@ -121,8 +121,11 @@ class DeviceSetupPlugin : Plugin() {
                     context.startActivity(intent)
                     call.resolve()
                     return
+                } catch (e: SecurityException) {
+                    // MIUI bloquea este intent en versiones recientes — se
+                    // intenta la siguiente opción conocida, si existe.
                 } catch (e: Exception) {
-                    // prueba con la siguiente opción conocida
+                    // continúa con la siguiente
                 }
             }
         }

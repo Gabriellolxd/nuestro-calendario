@@ -369,15 +369,29 @@ export default function EventoModal({
                   <Bell size={13} />
                   Tono de notificación
                 </label>
-                <select
-                  value={tonoNotificacion}
-                  onChange={(e) => setTonoNotificacion(e.target.value)}
-                  className="w-full rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
-                >
-                  {TONOS_NOTIFICACION.map((t) => (
-                    <option key={t.id} value={t.id}>{t.nombre}</option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={tonoNotificacion}
+                    onChange={(e) => setTonoNotificacion(e.target.value)}
+                    className="flex-1 rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2 text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+                  >
+                    {TONOS_NOTIFICACION.map((t) => (
+                      <option key={t.id} value={t.id}>{t.nombre}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tono = TONOS_NOTIFICACION.find((t) => t.id === tonoNotificacion);
+                      if (!tono) return;
+                      new Audio(`/sonidos/${tono.archivo}`).play().catch((err) => console.error('No se pudo reproducir:', err));
+                    }}
+                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border-2 border-[var(--color-border)] text-[var(--color-primary)] hover:bg-[var(--color-surface)]"
+                    aria-label="Escuchar tono"
+                  >
+                    ▶
+                  </button>
+                </div>
               </div>
 
               {esRecurrente && (
