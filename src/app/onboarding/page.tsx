@@ -21,12 +21,12 @@ type Paso = {
 };
 
 const PASOS: Paso[] = [
-  { id: 'bienvenida', titulo: '¡Bienvenida a Nuestro Calendario! 💛', descripcion: 'Un espacio hecho con cariño para organizar su vida juntos — eventos, notas, stickers, y hasta el ciclo menstrual, todo en un solo lugar acogedor.' },
-  { id: 'intro', titulo: 'Todo en un solo lugar', descripcion: 'Comparte tu calendario con quien quieras, decora los meses con stickers y notitas, y lleva un registro cálido de cada detalle importante.' },
-  { id: 'notificaciones', titulo: 'Avisos a tiempo', descripcion: 'Para que nunca se pierda un evento importante, la app necesita permiso para mostrar notificaciones.', soloNativo: true },
-  { id: 'bateria', titulo: 'Que los avisos no se duerman', descripcion: 'Algunos teléfonos "duermen" las apps para ahorrar batería, y eso puede silenciar tus notificaciones. Actívalo para asegurarte de recibirlas siempre a tiempo.', soloNativo: true },
-  { id: 'autoinicio', titulo: 'Un último ajuste', descripcion: 'En algunos teléfonos (Xiaomi, Huawei, Samsung y otros) hay que permitir el "inicio automático" para que la app pueda avisarte incluso si no la abres seguido.', soloNativo: true },
-  { id: 'listo', titulo: '¡Todo listo! 🎉', descripcion: 'Ya puedes empezar a usar Nuestro Calendario. Gracias por darle una oportunidad — esperamos que lo disfrutes.' },
+  { id: 'bienvenida', titulo: '¡Bienvenida a Nuestro Calendario! ❤️', descripcion: 'Un espacio hecho con cariño para organizar nuestra vida juntos. ¡Hay eventos, notitas, stickers, y hasta el ciclo menstrual! Todo en un solo lugar ;)' },
+  { id: 'intro', titulo: '¡Comparte tu calendario con quien quieras!', descripcion: 'Dejales notas o stickers rancios a los demás y no se pierdan de ningún detalle de la vida del otro.' },
+  { id: 'notificaciones', titulo: 'Antes de comenzar 👌', descripcion: 'Para que nunca pierdas un evento importante, la app necesita permiso para mostrar notificaciones.', soloNativo: true },
+  { id: 'bateria', titulo: '¡Que los avisos no se duerman!', descripcion: 'Algunos teléfonos "duermen" las apps para ahorrar batería, y eso puede silenciar tus notificaciones. Actívalo para asegurarte de recibirlas siempre a tiempo.', soloNativo: true },
+  { id: 'autoinicio', titulo: 'Un último ajuste...', descripcion: 'En algunos teléfonos (Xiaomi, Huawei, Samsung y otros) hay que permitir el "inicio automático" para que la app pueda avisarte incluso si no la abres seguido.', soloNativo: true },
+  { id: 'listo', titulo: '¡Todo listo! 🎉', descripcion: 'Ya puedes empezar a usar Nuestro Calendario. Aunque ahora es TU calendario ❤️ Gracias por darle una oportunidad.' },
 ];
 
 function ImagenPaso({ src, Fallback }: { src?: string; Fallback: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }> }) {

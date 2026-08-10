@@ -2,6 +2,7 @@
 import { db } from './db';
 import { supabase } from './supabase';
 import { recalcularYGuardarPrediccion } from './localData';
+import { registrarErrorSync, limpiarErrorSync } from './syncErrorStore';
 
 type EntityType = 'event' | 'event_exception' | 'cycle_log';
 
@@ -45,6 +46,7 @@ export async function subirCambiosPendientes(): Promise<{ huboConflictos: boolea
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
   if (!token) return { huboConflictos: false };
+  limpiarErrorSync(); // se limpia al iniciar un nuevo intento
 
   const cambios = [
     ...eventosPendientes.map((e) => ({ entity_type: 'event' as const, data: paraEnviar(e) })),
@@ -60,13 +62,24 @@ export async function subirCambiosPendientes(): Promise<{ huboConflictos: boolea
   // .replace(/\/$/, '') quita cualquier barra final que quede en la env
   // var por accidente, para nunca volver a generar una doble barra.
   const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-  const res = await fetch(`${apiBase}/api/sync`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ cambios }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}/api/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ cambios }),
+    });
+  } catch (err) {
+    const msg = 'No se pudo conectar con el servidor. Revisa tu conexión a internet.';
+    registrarErrorSync(msg);
+    throw new Error(msg);
+  }
 
-  if (!res.ok) throw new Error('Error al sincronizar con el servidor.');
+  if (!res.ok) {
+    const msg = `El servidor respondió con error (${res.status}).`;
+    registrarErrorSync(msg);
+    throw new Error(msg);
+  }
 
   const { resultados }: { resultados: ResultadoSync[] } = await res.json();
   let huboConflictos = false;
@@ -85,6 +98,7 @@ export async function subirCambiosPendientes(): Promise<{ huboConflictos: boolea
       huboConflictos = true;
     } else if (r.estado === 'error') {
       console.error(`Error sincronizando ${r.entity_type} ${r.id}:`, r.mensaje);
+      registrarErrorSync(`${r.entity_type}: ${r.mensaje}`);
     }
   }
 
