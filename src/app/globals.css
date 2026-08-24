@@ -36,7 +36,7 @@
   --sombra-panel-suave: 0 2px 0 var(--color-border), 0 4px 10px rgba(92, 58, 38, 0.14);
   --brillo-interior: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 
-  --color-leather: #5c3a2e;
+    --color-leather: #5c3a2e;
 }
 
 [data-theme='dark'] {
@@ -99,6 +99,12 @@ body {
     radial-gradient(circle at 85% 25%, rgba(124, 143, 92, 0.08) 0%, transparent 38%),
     radial-gradient(circle at 50% 90%, rgba(138, 90, 59, 0.08) 0%, transparent 45%);
   background-attachment: fixed;
+}
+
+.textura-cuero {
+  background-image:
+    radial-gradient(circle at 30% 15%, rgba(255,255,255,0.08) 0%, transparent 40%),
+    radial-gradient(circle at 70% 85%, rgba(0,0,0,0.18) 0%, transparent 45%);
 }
 
 /* ============================================================

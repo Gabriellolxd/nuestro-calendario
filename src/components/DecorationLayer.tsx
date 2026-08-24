@@ -1,7 +1,9 @@
 // src/components/DecorationLayer.tsx
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, type MutableRefObject } from 'react';
+import { createPortal } from 'react-dom';
+import { Trash2 } from 'lucide-react';
 import type { StickerPlacementLocal, StickyNoteLocal, StickerAssetLocal } from '@/lib/db';
 import {
   obtenerPlacementsLocal,
@@ -19,20 +21,23 @@ import {
   subirNotasPendientes,
 } from '@/lib/notesLocal';
 import { PALETA_COLORES } from '@/lib/colors';
+import { playSound } from '@/lib/soundManager';
 
 type Props = {
   calendarioOwnerId: string;
   colocadoPorUserId: string;
   targetMes: string;
-  editable: boolean; // ahora significa "tiene permiso" (no Espectador), no "modo decorar activo"
+  editable: boolean;
   stickerAssets: StickerAssetLocal[];
   refreshTick: number;
   arrastreDesdeTray: { assetId: string; x: number; y: number } | null;
   onArrastreDesdeTrayTerminado: () => void;
+  onArrastreActivoChange?: (activo: boolean) => void;
+  decoDragRef?: MutableRefObject<boolean>;
 };
 
-const RADIO_BASURERO = 45;
-const UMBRAL_CLICK_PX = 6; // menos que esto = clic; más = arrastre
+const RADIO_BASURERO = 50;
+const UMBRAL_CLICK_PX = 6;
 
 type ModoInteraccion = 'ninguno' | 'arrastrando' | 'girando' | 'escalando';
 
@@ -45,6 +50,8 @@ export default function DecorationLayer({
   refreshTick,
   arrastreDesdeTray,
   onArrastreDesdeTrayTerminado,
+  onArrastreActivoChange,
+  decoDragRef,
 }: Props) {
   const contenedorRef = useRef<HTMLDivElement>(null);
   const basureroRef = useRef<HTMLDivElement>(null);
@@ -54,18 +61,18 @@ export default function DecorationLayer({
   const [sobreBasurero, setSobreBasurero] = useState(false);
   const [fantasma, setFantasma] = useState<{ url: string; x: number; y: number } | null>(null);
   const [modoInteraccion, setModoInteraccion] = useState<ModoInteraccion>('ninguno');
+  const [montado, setMontado] = useState(false);
 
-  // Gesto que todavía no se sabe si terminará siendo clic o arrastre.
+  // Los portales (basurero, fantasma) solo pueden usar document.body una
+  // vez que el componente está montado en el navegador — evita errores
+  // durante el renderizado en servidor.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setMontado(true), []);
+
   const gestoPendiente = useRef<{ tipo: 'sticker' | 'nota'; id: string; startX: number; startY: number } | null>(null);
   const arrastrando = useRef<{ tipo: 'sticker' | 'nota'; id: string } | null>(null);
   const girando = useRef<{ tipo: 'sticker' | 'nota'; id: string; centroX: number; centroY: number } | null>(null);
-  const escalando = useRef<{
-    id: string;
-    centroX: number;
-    centroY: number;
-    distanciaInicial: number;
-    escalaInicial: number;
-  } | null>(null);
+  const escalando = useRef<{ id: string; centroX: number; centroY: number; distanciaInicial: number; escalaInicial: number } | null>(null);
 
   const cargar = useCallback(async () => {
     const [todosPlacements, todasNotas] = await Promise.all([
@@ -85,10 +92,15 @@ export default function DecorationLayer({
     if (!arrastreDesdeTray) return;
     const asset = stickerAssets.find((a) => a.id === arrastreDesdeTray.assetId);
     if (asset) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- inicia el "fantasma" que sigue al dedo al arrastrar desde la bandeja externa
+      if (decoDragRef) decoDragRef.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- inicia el "fantasma" al arrastrar desde la bandeja externa
       setFantasma({ url: urlParaSticker(asset), x: arrastreDesdeTray.x, y: arrastreDesdeTray.y });
     }
-  }, [arrastreDesdeTray, stickerAssets]);
+  }, [arrastreDesdeTray, stickerAssets, decoDragRef]);
+
+  useEffect(() => {
+    onArrastreActivoChange?.(modoInteraccion !== 'ninguno' || !!fantasma);
+  }, [modoInteraccion, fantasma, onArrastreActivoChange]);
 
   function assetDe(placement: StickerPlacementLocal) {
     return stickerAssets.find((a) => a.id === placement.sticker_asset_id);
@@ -117,17 +129,16 @@ export default function DecorationLayer({
     return Math.hypot(clientX - cx, clientY - cy) < RADIO_BASURERO;
   }
 
-  // Se llama al presionar sobre un sticker o el alfiler de una nota. NO
-  // decide todavía si es clic o arrastre — eso se resuelve en base al
-  // movimiento acumulado antes de soltar.
   function onPointerDownItem(tipo: 'sticker' | 'nota', id: string, e: React.PointerEvent) {
     if (!editable) return;
+    if (decoDragRef) decoDragRef.current = true;
     e.stopPropagation();
     gestoPendiente.current = { tipo, id, startX: e.clientX, startY: e.clientY };
   }
 
   function iniciarGiro(tipo: 'sticker' | 'nota', id: string) {
     if (!editable) return;
+    if (decoDragRef) decoDragRef.current = true;
     const item = tipo === 'sticker' ? placements.find((p) => p.id === id) : notas.find((n) => n.id === id);
     if (!item) return;
     const { x, y } = centroEnPantalla(item.pos_x, item.pos_y);
@@ -137,6 +148,7 @@ export default function DecorationLayer({
 
   function iniciarEscala(id: string, clientX: number, clientY: number) {
     if (!editable) return;
+    if (decoDragRef) decoDragRef.current = true;
     const p = placements.find((pl) => pl.id === id);
     if (!p) return;
     const { x, y } = centroEnPantalla(p.pos_x, p.pos_y);
@@ -156,11 +168,8 @@ export default function DecorationLayer({
       const dx = clientX - centroX;
       const dy = clientY - centroY;
       const angulo = (Math.atan2(-dx, dy) * 180) / Math.PI;
-      if (tipo === 'sticker') {
-        setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, rotacion: angulo } : p)));
-      } else {
-        setNotas((prev) => prev.map((n) => (n.id === id ? { ...n, rotacion: angulo } : n)));
-      }
+      if (tipo === 'sticker') setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, rotacion: angulo } : p)));
+      else setNotas((prev) => prev.map((n) => (n.id === id ? { ...n, rotacion: angulo } : n)));
       return;
     }
     if (escalando.current) {
@@ -170,138 +179,110 @@ export default function DecorationLayer({
       setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, escala: nuevaEscala } : p)));
       return;
     }
-
-    // Todavía no se sabe si es clic o arrastre: medir distancia acumulada.
     if (gestoPendiente.current && !arrastrando.current) {
       const { startX, startY } = gestoPendiente.current;
       const distancia = Math.hypot(clientX - startX, clientY - startY);
-      if (distancia < UMBRAL_CLICK_PX) return; // aún podría ser un clic, no mover nada todavía
+      if (distancia < UMBRAL_CLICK_PX) return;
       arrastrando.current = { tipo: gestoPendiente.current.tipo, id: gestoPendiente.current.id };
       setModoInteraccion('arrastrando');
+      playSound(gestoPendiente.current.tipo === 'nota' ? 'agarrar_nota' : 'agarrar');
     }
-
     if (!arrastrando.current) return;
     const { x, y } = posDesde(clientX, clientY);
     const { tipo, id } = arrastrando.current;
-    if (tipo === 'sticker') {
-      setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, pos_x: x, pos_y: y } : p)));
-    } else {
-      setNotas((prev) => prev.map((n) => (n.id === id ? { ...n, pos_x: x, pos_y: y } : n)));
-    }
+    if (tipo === 'sticker') setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, pos_x: x, pos_y: y } : p)));
+    else setNotas((prev) => prev.map((n) => (n.id === id ? { ...n, pos_x: x, pos_y: y } : n)));
     setSobreBasurero(estaSobreBasurero(clientX, clientY));
   }
 
   async function soltar(clientX: number, clientY: number) {
-    if (fantasma) {
-      const cancelado = sobreBasurero;
-      const asset = stickerAssets.find((a) => a.id === arrastreDesdeTray?.assetId);
-      if (asset && !cancelado) {
-        const { x, y } = posDesde(clientX, clientY);
-        await colocarStickerLocal({
-          calendarioOwnerId,
-          colocadoPorUserId,
-          stickerAssetId: asset.id,
-          targetType: 'mes',
-          targetMes,
-          posX: x,
-          posY: y,
-        });
-        await cargar();
-        subirStickersPendientes().catch((err) => console.error(err));
-      }
-      setFantasma(null);
-      setSobreBasurero(false);
-      onArrastreDesdeTrayTerminado();
-      return;
-    }
-
-    if (girando.current) {
-      const { tipo, id } = girando.current;
-      girando.current = null;
-      setModoInteraccion('ninguno');
-      if (tipo === 'sticker') {
-        const p = placements.find((pl) => pl.id === id);
-        if (p) {
-          await actualizarTransformStickerLocal(id, { rotacion: p.rotacion });
+    try {
+      if (fantasma) {
+        const cancelado = sobreBasurero;
+        const asset = stickerAssets.find((a) => a.id === arrastreDesdeTray?.assetId);
+        if (asset && !cancelado) {
+          const { x, y } = posDesde(clientX, clientY);
+          await colocarStickerLocal({
+            calendarioOwnerId, colocadoPorUserId, stickerAssetId: asset.id,
+            targetType: 'mes', targetMes, posX: x, posY: y,
+          });
+          playSound('pop');
+          await cargar();
           subirStickersPendientes().catch((err) => console.error(err));
         }
-      } else {
-        const n = notas.find((nn) => nn.id === id);
-        if (n) {
-          await actualizarNotaLocal(id, { rotacion: n.rotacion });
-          subirNotasPendientes().catch((err) => console.error(err));
-        }
-      }
-      return;
-    }
-
-    if (escalando.current) {
-      const { id } = escalando.current;
-      escalando.current = null;
-      setModoInteraccion('ninguno');
-      const p = placements.find((pl) => pl.id === id);
-      if (p) {
-        await actualizarTransformStickerLocal(id, { escala: p.escala });
-        subirStickersPendientes().catch((err) => console.error(err));
-      }
-      return;
-    }
-
-    // Resolver si el gesto fue clic (sin arrastre real) o un arrastre.
-    if (gestoPendiente.current) {
-      const { id } = gestoPendiente.current;
-      const fueArrastre = !!arrastrando.current;
-      gestoPendiente.current = null;
-
-      if (!fueArrastre) {
-        // Clic puro: abre el menú de edición, no mueve nada.
-        setSeleccionId(id);
+        setFantasma(null);
+        setSobreBasurero(false);
+        onArrastreDesdeTrayTerminado();
         return;
       }
-    }
 
-    if (!arrastrando.current) return;
-    const { tipo, id } = arrastrando.current;
-    arrastrando.current = null;
-    setModoInteraccion('ninguno');
+      if (girando.current) {
+        const { tipo, id } = girando.current;
+        girando.current = null;
+        setModoInteraccion('ninguno');
+        if (tipo === 'sticker') {
+          const p = placements.find((pl) => pl.id === id);
+          if (p) { await actualizarTransformStickerLocal(id, { rotacion: p.rotacion }); subirStickersPendientes().catch((err) => console.error(err)); }
+        } else {
+          const n = notas.find((nn) => nn.id === id);
+          if (n) { await actualizarNotaLocal(id, { rotacion: n.rotacion }); subirNotasPendientes().catch((err) => console.error(err)); }
+        }
+        return;
+      }
 
-    if (sobreBasurero) {
-      setSobreBasurero(false);
+      if (escalando.current) {
+        const { id } = escalando.current;
+        escalando.current = null;
+        setModoInteraccion('ninguno');
+        const p = placements.find((pl) => pl.id === id);
+        if (p) { await actualizarTransformStickerLocal(id, { escala: p.escala }); subirStickersPendientes().catch((err) => console.error(err)); }
+        return;
+      }
+
+      if (gestoPendiente.current) {
+        const { id } = gestoPendiente.current;
+        const fueArrastre = !!arrastrando.current;
+        gestoPendiente.current = null;
+        if (!fueArrastre) { setSeleccionId(id); return; }
+      }
+
+      if (!arrastrando.current) return;
+      const { tipo, id } = arrastrando.current;
+      arrastrando.current = null;
+      setModoInteraccion('ninguno');
+
+      if (sobreBasurero) {
+        setSobreBasurero(false);
+        playSound('eliminar');
+        if (tipo === 'sticker') {
+          setPlacements((prev) => prev.filter((p) => p.id !== id));
+          await quitarStickerLocal(id);
+          subirStickersPendientes().catch((err) => console.error(err));
+        } else {
+          setNotas((prev) => prev.filter((n) => n.id !== id));
+          await eliminarNotaLocal(id);
+          subirNotasPendientes().catch((err) => console.error(err));
+        }
+        setSeleccionId(null);
+        return;
+      }
+
+      playSound('pegar');
       if (tipo === 'sticker') {
-        setPlacements((prev) => prev.filter((p) => p.id !== id));
-        await quitarStickerLocal(id);
-        subirStickersPendientes().catch((err) => console.error(err));
+        const p = placements.find((pl) => pl.id === id);
+        if (p) { await moverStickerLocal(id, p.pos_x, p.pos_y); subirStickersPendientes().catch((err) => console.error(err)); }
       } else {
-        setNotas((prev) => prev.filter((n) => n.id !== id));
-        await eliminarNotaLocal(id);
-        subirNotasPendientes().catch((err) => console.error(err));
+        const n = notas.find((nn) => nn.id === id);
+        if (n) { await actualizarNotaLocal(id, { pos_x: n.pos_x, pos_y: n.pos_y }); subirNotasPendientes().catch((err) => console.error(err)); }
       }
-      setSeleccionId(null);
-      return;
-    }
-
-    if (tipo === 'sticker') {
-      const p = placements.find((pl) => pl.id === id);
-      if (p) {
-        await moverStickerLocal(id, p.pos_x, p.pos_y);
-        subirStickersPendientes().catch((err) => console.error(err));
-      }
-    } else {
-      const n = notas.find((nn) => nn.id === id);
-      if (n) {
-        await actualizarNotaLocal(id, { pos_x: n.pos_x, pos_y: n.pos_y });
-        subirNotasPendientes().catch((err) => console.error(err));
-      }
+    } finally {
+      if (decoDragRef) decoDragRef.current = false;
     }
   }
 
   useEffect(() => {
-    function onMove(e: PointerEvent) {
-      mover(e.clientX, e.clientY);
-    }
-    function onUp(e: PointerEvent) {
-      soltar(e.clientX, e.clientY);
-    }
+    function onMove(e: PointerEvent) { mover(e.clientX, e.clientY); }
+    function onUp(e: PointerEvent) { soltar(e.clientX, e.clientY); }
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     return () => {
@@ -311,15 +292,10 @@ export default function DecorationLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placements, notas, fantasma, sobreBasurero]);
 
-  // Deseleccionar al tocar fuera de cualquier sticker/nota — el contenedor
-  // interno tiene pointer-events-none, así que su propio onClick nunca
-  // captura clics "afuera"; se necesita un listener global.
   useEffect(() => {
     function onGlobalPointerDown(e: PointerEvent) {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-deco-item]')) {
-        setSeleccionId(null);
-      }
+      if (!target.closest('[data-deco-item]')) setSeleccionId(null);
     }
     window.addEventListener('pointerdown', onGlobalPointerDown);
     return () => window.removeEventListener('pointerdown', onGlobalPointerDown);
@@ -356,11 +332,13 @@ export default function DecorationLayer({
               className="pointer-events-none absolute"
               style={{ left: `${p.pos_x}%`, top: `${p.pos_y}%`, zIndex: seleccionado ? 50 : p.z_index }}
             >
-              <div data-deco-item
+              <div
+                data-deco-item
                 className="pointer-events-auto relative animate-[stickerPop_0.25s_ease-out]"
                 style={{
-                  transform: `translate(-50%, -50%) rotate(${p.rotacion}deg) scale(${p.escala})`,
+                  transform: `translate(-50%, -50%) rotate(${p.rotacion}deg) scale(${seleccionado ? p.escala * 1.08 : p.escala})`,
                   touchAction: 'none',
+                  transition: modoInteraccion === 'ninguno' ? 'transform 0.15s ease-out' : 'none',
                 }}
                 onPointerDown={(e) => onPointerDownItem('sticker', p.id, e)}
                 onClick={(e) => e.stopPropagation()}
@@ -368,10 +346,7 @@ export default function DecorationLayer({
                 <img src={urlParaSticker(asset)} alt={asset.nombre} className="w-16 select-none drop-shadow-md" draggable={false} />
                 {editable && seleccionado && (
                   <div
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      iniciarEscala(p.id, e.clientX, e.clientY);
-                    }}
+                    onPointerDown={(e) => { e.stopPropagation(); iniciarEscala(p.id, e.clientX, e.clientY); }}
                     className="absolute -bottom-1 -right-1 flex h-5 w-5 cursor-nwse-resize items-center justify-center rounded-full bg-white text-[10px] shadow"
                     title="Arrastra para agrandar o achicar"
                   >
@@ -382,14 +357,12 @@ export default function DecorationLayer({
 
               {editable && seleccionado && (
                 <div
+                  data-deco-item
                   className="pointer-events-auto absolute left-1/2 top-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white px-2 py-1 shadow-lg"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      iniciarGiro('sticker', p.id);
-                    }}
+                    onPointerDown={(e) => { e.stopPropagation(); iniciarGiro('sticker', p.id); }}
                     className="cursor-grab select-none text-xs active:cursor-grabbing"
                     title="Arrastra para girar"
                   >
@@ -410,11 +383,15 @@ export default function DecorationLayer({
               style={{ left: `${n.pos_x}%`, top: `${n.pos_y}%`, zIndex: seleccionada ? 50 : n.z_index }}
             >
               <div
+                data-deco-item
                 className="pointer-events-auto relative animate-[stickerPop_0.25s_ease-out]"
-                style={{ transform: `translate(-50%, -50%) rotate(${n.rotacion}deg)` }}
+                style={{
+                  transform: `translate(-50%, -50%) rotate(${n.rotacion}deg) scale(${seleccionada ? 1.06 : 1})`,
+                  transition: modoInteraccion === 'ninguno' ? 'transform 0.15s ease-out' : 'none',
+                }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div data-deco-item
+                <div
                   onPointerDown={(e) => onPointerDownItem('nota', n.id, e)}
                   className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 cursor-grab touch-none select-none text-lg active:cursor-grabbing"
                   title="Arrastra el alfiler para mover la nota"
@@ -424,10 +401,7 @@ export default function DecorationLayer({
                 <div
                   className="rounded-lg p-2 pt-4 text-[11px] shadow-md"
                   style={{ backgroundColor: n.color }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (editable) setSeleccionId(n.id);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); if (editable) setSeleccionId(n.id); }}
                 >
                   {editable ? (
                     <textarea
@@ -446,15 +420,13 @@ export default function DecorationLayer({
 
               {editable && seleccionada && (
                 <div
+                  data-deco-item
                   className="pointer-events-auto absolute left-1/2 top-24 flex -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-full bg-white px-2 py-1 shadow-lg"
                   style={{ width: 160 }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      iniciarGiro('nota', n.id);
-                    }}
+                    onPointerDown={(e) => { e.stopPropagation(); iniciarGiro('nota', n.id); }}
                     className="cursor-grab select-none text-xs active:cursor-grabbing"
                     title="Arrastra para girar"
                   >
@@ -476,10 +448,7 @@ export default function DecorationLayer({
                       onChange={(e) => handleCambiarColorNota(n.id, e.target.value)}
                       className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     />
-                    <div
-                      className="h-4 w-4 rounded-full"
-                      style={{ background: 'conic-gradient(from 0deg, red, yellow, lime, aqua, blue, magenta, red)' }}
-                    />
+                    <div className="h-4 w-4 rounded-full" style={{ background: 'conic-gradient(from 0deg, red, yellow, lime, aqua, blue, magenta, red)' }} />
                   </div>
                 </div>
               )}
@@ -488,24 +457,48 @@ export default function DecorationLayer({
         })}
       </div>
 
-      {mostrarBasurero && (
-        <div
-          ref={basureroRef}
-          className={`fixed bottom-6 left-1/2 z-[60] flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full text-2xl shadow-lg transition-transform ${
-            sobreBasurero ? 'scale-125 bg-red-500' : 'bg-gray-700'
-          }`}
-        >
-          🗑️
-        </div>
-      )}
+      {/* Portal a document.body: el basurero y el "fantasma" son fixed
+          respecto a la PANTALLA real, sin importar si algún ancestro
+          (como el contenedor del swipe) tiene un `transform` aplicado —
+          eso rompía el posicionamiento fixed normal. */}
+      {montado && createPortal(
+        <>
+          {mostrarBasurero && (
+            <div
+              ref={basureroRef}
+              className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 flex-col items-center gap-1.5"
+            >
+              <div
+                className={`flex h-16 w-16 items-center justify-center rounded-full border-2 shadow-xl transition-all duration-200 ${
+                  sobreBasurero
+                    ? 'scale-125 border-[var(--color-danger)] bg-[var(--color-danger)]'
+                    : 'border-[var(--color-wood-dark)] bg-[var(--color-bg-elevated)]'
+                }`}
+              >
+                <Trash2
+                  size={26}
+                  strokeWidth={2.2}
+                  className={sobreBasurero ? 'text-white' : 'text-[var(--color-text-muted)]'}
+                />
+              </div>
+              {sobreBasurero && (
+                <span className="animar-entrada rounded-full bg-[var(--color-danger)] px-2.5 py-0.5 text-[10px] font-semibold text-white shadow">
+                  Suelta para eliminar
+                </span>
+              )}
+            </div>
+          )}
 
-      {fantasma && (
-        <img
-          src={fantasma.url}
-          alt=""
-          className="pointer-events-none fixed z-[70] w-16 opacity-80 drop-shadow-lg"
-          style={{ left: fantasma.x, top: fantasma.y, transform: 'translate(-50%, -50%)' }}
-        />
+          {fantasma && (
+            <img
+              src={fantasma.url}
+              alt=""
+              className="pointer-events-none fixed z-[110] w-16 opacity-80 drop-shadow-lg"
+              style={{ left: fantasma.x, top: fantasma.y, transform: 'translate(-50%, -50%)' }}
+            />
+          )}
+        </>,
+        document.body
       )}
     </>
   );

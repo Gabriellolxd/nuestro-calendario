@@ -18,6 +18,7 @@ import { reprogramarNotificacionesDeUsuario } from '@/lib/notifications';
 import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
 import { TONOS_NOTIFICACION } from '@/lib/notificationTones';
 import { obtenerEventosLocal, obtenerExcepcionesLocal } from '@/lib/localData';
+import { playSound } from '@/lib/soundManager';
 
 type ModoEdicion = {
   ocurrencia: Ocurrencia;
@@ -76,6 +77,7 @@ export default function EventoModal({
   const esColorPredefinido = PALETA_COLORES.some((c) => c.hex.toLowerCase() === color.toLowerCase());
 
   async function despuesDeGuardar() {
+    playSound('guardar');
     onGuardado();
     onClose();
     subirCambiosPendientes().catch((err) => console.error('Error sincronizando:', err));
@@ -199,6 +201,7 @@ export default function EventoModal({
         });
       }
 
+      playSound('eliminar');
       await despuesDeGuardar();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al eliminar el evento.');

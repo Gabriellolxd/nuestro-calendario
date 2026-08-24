@@ -9,6 +9,7 @@ import { LogOut, Link2, Droplet, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ThemeSwitcher from './ThemeSwitcher';
 import NotificacionesCalendariosModal from './NotificacionesCalendariosModal';
+import { playSound } from '@/lib/soundManager';
 
 export default function PerfilMenu() {
   const [abierto, setAbierto] = useState(false);
@@ -34,7 +35,10 @@ export default function PerfilMenu() {
   return (
     <div className="relative" ref={contenedorRef}>
       <button
-        onClick={() => setAbierto((a) => !a)}
+        onClick={() => {
+          if (!abierto) playSound('menu');
+          setAbierto((a) => !a);
+        }}
         className="h-9 w-9 overflow-hidden rounded-full ring-2 ring-[var(--color-gold)] shadow-sm transition-transform active:scale-95"
         aria-label="Menú de perfil"
       >

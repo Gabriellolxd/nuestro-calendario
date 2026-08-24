@@ -21,6 +21,7 @@ import { calcularFaseDia, NOMBRES_FASE, type FaseDia, type CycleLogInput } from 
 import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import CicloDiaModal from '@/components/CicloDiaModal';
 import PantallaCarga from '@/components/PantallaCarga';
+import { playSound } from '@/lib/soundManager';
 
 function fechaAISO(dia: Date): string {
   return format(dia, 'yyyy-MM-dd');
@@ -109,6 +110,7 @@ export default function CicloPage() {
       const deviceId = getDeviceId();
       const ahora = new Date().toISOString();
       const fechaStr = fechaAISO(dia);
+      playSound('periodo');
       await crearCycleLogLocal({
         id: crypto.randomUUID(),
         user_id: ownerId,
@@ -147,6 +149,7 @@ export default function CicloPage() {
 
   async function handleEliminarDia() {
     if (!diaEditando || !ownerId) return;
+    playSound('eliminar');
     const deviceId = getDeviceId();
     await eliminarCycleLogLocal(diaEditando.id, deviceId);
     await recalcularYGuardarPrediccion(ownerId);
@@ -284,6 +287,7 @@ export default function CicloPage() {
               return (
                 <button
                   key={dia.toISOString()}
+                  data-no-sfx
                   onClick={() => handleClickDia(dia)}
                   disabled={esEspectador}
                   title={fase ? NOMBRES_FASE[fase.fase] : undefined}

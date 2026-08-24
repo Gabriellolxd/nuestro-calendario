@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Palette, StickyNote as StickyNoteIcon, Droplet, Sprout, Heart, Egg, Moon, Leaf } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Palette, StickyNote as StickyNoteIcon, Droplet, Sprout, Heart, Egg, Moon } from 'lucide-react';
 import PerfilMenu from '@/components/PerfilMenu';
 import SelectorCalendario from '@/components/SelectorCalendario';
 import { useCalendarioActivo } from '@/lib/CalendarioActivoContext';
@@ -40,8 +40,12 @@ import { obtenerStickersLocal, colocarStickerLocal, subirStickersPendientes, des
 import { crearNotaLocal, subirNotasPendientes, descargarNotasDesdeNube } from '@/lib/notesLocal';
 import type { StickerAssetLocal } from '@/lib/db';
 import StickerBook from '@/components/StickerBook';
+import NotesStack from '@/components/NotesStack';
+import MusicButton from '@/components/MusicButton';
 import { registrarStickersPredefinidos } from '@/lib/stickersLocal';
+import { playSound } from '@/lib/soundManager';
 import PantallaCarga from '@/components/PantallaCarga';
+import BannerSinConexion from '@/components/BannerSinConexion';
 
 const MAX_CHIPS_MES = 4;
 
@@ -90,6 +94,8 @@ export default function CalendarioPage() {
   const diasMes = getMonthGrid(fechaAncla);
   const diasSemana = getWeekGrid(fechaAncla);
   const inicioSwipe = useRef<{ x: number; y: number } | null>(null);
+  
+  const [arrastreDecoActivo, setArrastreDecoActivo] = useState(false);
 
   let rangoInicio: Date;
   let rangoFin: Date;
@@ -207,6 +213,7 @@ export default function CalendarioPage() {
   }
 
   function abrirModalParaEditar(oc: Ocurrencia) {
+    playSound('click');
     setDiaSeleccionado(oc.hora_inicio);
     setOcurrenciaEditando(oc);
     setHoraDefault(null);
@@ -235,25 +242,58 @@ export default function CalendarioPage() {
   }
 
   const UMBRAL_SWIPE_PX = 50;
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeTransicion, setSwipeTransicion] = useState(false);
+  const arrastreHorizontalRef = useRef(false);
+  const decoDragRef = useRef(false);
 
   function manejarSwipeInicio(e: React.TouchEvent) {
+    if (decoDragRef.current) return;
     const t = e.touches[0];
     inicioSwipe.current = { x: t.clientX, y: t.clientY };
+    arrastreHorizontalRef.current = false;
+  }
+
+  function manejarSwipeMove(e: React.TouchEvent) {
+    if (decoDragRef.current || !inicioSwipe.current) return;
+    const t = e.touches[0];
+    const dx = t.clientX - inicioSwipe.current.x;
+    const dy = t.clientY - inicioSwipe.current.y;
+    if (!arrastreHorizontalRef.current) {
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.3) arrastreHorizontalRef.current = true;
+      else return;
+    }
+    setSwipeOffset(dx);
   }
 
   function manejarSwipeFin(e: React.TouchEvent) {
+    if (decoDragRef.current) { inicioSwipe.current = null; return; }
     if (!inicioSwipe.current) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - inicioSwipe.current.x;
-    const dy = t.clientY - inicioSwipe.current.y;
     inicioSwipe.current = null;
+    arrastreHorizontalRef.current = false;
 
-    // Solo cuenta como swipe horizontal si el movimiento lateral domina
-    // claramente sobre el vertical — evita confundirlo con scroll normal.
-    if (Math.abs(dx) < UMBRAL_SWIPE_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (Math.abs(dx) < UMBRAL_SWIPE_PX) {
+      setSwipeTransicion(true);
+      setSwipeOffset(0);
+      setTimeout(() => setSwipeTransicion(false), 200);
+      return;
+    }
 
-    if (dx > 0) irAnterior();
-    else irSiguiente();
+    const ancho = window.innerWidth;
+    setSwipeTransicion(true);
+    setSwipeOffset(dx > 0 ? ancho : -ancho);
+    setTimeout(() => {
+      if (dx > 0) irAnterior();
+      else irSiguiente();
+      setSwipeTransicion(false);
+      setSwipeOffset(dx > 0 ? -40 : 40);
+      requestAnimationFrame(() => {
+        setSwipeTransicion(true);
+        setSwipeOffset(0);
+      });
+    }, 200);
   }
 
   function tituloEncabezado(): string {
@@ -291,9 +331,10 @@ export default function CalendarioPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-24 textura-cozy">
+      <BannerSinConexion />
       <div className="sticky top-0 z-40 border-b-[3px] border-[var(--color-wood-dark)] bg-[var(--color-bg-elevated)]">
         <div className="relative flex items-center justify-between px-4 py-2">
-          <div className="w-[40px]" aria-hidden="true" />
+          <MusicButton />
 
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 placa flex items-center gap-2 px-2 py-1.5">
             <button
@@ -308,7 +349,6 @@ export default function CalendarioPage() {
               className="flex items-center gap-2 px-2"
               title="Seleccionar fecha"
             >
-              <Leaf size={14} className="text-[var(--color-sage-soft)]" strokeWidth={2.5} />
               <span className="font-display text-sm font-semibold capitalize tracking-wide">
                 {tituloEncabezado()}
               </span>
@@ -348,7 +388,7 @@ export default function CalendarioPage() {
             <button
               key={v}
               onClick={() => setVista(v)}
-              className={`cinta px-5 py-1.5 text-xs font-semibold capitalize transition-colors ${
+              className={`cinta px-5 py-1.5 text-xs font-semibold capitalize transition-all hover:-translate-y-0.5 hover:brightness-95 ${
                 vista === v
                   ? 'bg-[var(--color-primary)] text-[var(--color-text-inverse)]'
                   : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'
@@ -362,19 +402,30 @@ export default function CalendarioPage() {
         <SelectorCalendario />
       </div>
 
-      <div className="px-2 pt-2" onTouchStart={manejarSwipeInicio} onTouchEnd={manejarSwipeFin}>
+      <div
+        className="px-2 pt-2"
+        onTouchStart={manejarSwipeInicio}
+        onTouchMove={manejarSwipeMove}
+        onTouchEnd={manejarSwipeFin}
+        style={{
+          transform: `translateX(${swipeOffset}px)`,
+          transition: swipeTransicion ? 'transform 0.2s ease-out' : 'none',
+        }}
+      >
         {vista === 'mes' && ownerId && (
-          <div className="relative panel-madera overflow-hidden">
-            <VistaMes
-              dias={diasMes}
-              mesActual={fechaAncla}
-              diaResaltado={diaSeleccionadoUsuario}
-              ocurrencias={ocurrencias}
-              fasePorDia={obtenerFasePorFecha}
-              onCrear={modoDecorar ? () => {} : abrirModalParaCrear}
-              onEditar={abrirModalParaEditar}
-              onDetalle={abrirDetalle}
-            />
+          <div className="relative">
+            <div className="panel-madera overflow-hidden">
+              <VistaMes
+                dias={diasMes}
+                mesActual={fechaAncla}
+                diaResaltado={diaSeleccionadoUsuario}
+                ocurrencias={ocurrencias}
+                fasePorDia={obtenerFasePorFecha}
+                onCrear={modoDecorar ? () => {} : abrirModalParaCrear}
+                onEditar={abrirModalParaEditar}
+                onDetalle={abrirDetalle}
+              />
+            </div>
             <DecorationLayer
               calendarioOwnerId={ownerId}
               colocadoPorUserId={userId!}
@@ -387,6 +438,8 @@ export default function CalendarioPage() {
                 setArrastreTray(null);
                 setDecoTick((t) => t + 1);
               }}
+              onArrastreActivoChange={setArrastreDecoActivo}
+              decoDragRef={decoDragRef}
             />
           </div>
         )}
@@ -428,37 +481,28 @@ export default function CalendarioPage() {
       )}
 
       {!esEspectador && vista === 'mes' && (
-        <button
-          onClick={() => setModoDecorar((v) => !v)}
-          className={`boton-tallado fixed bottom-24 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full ${
-            modoDecorar
-              ? 'bg-[var(--color-sage)] text-[var(--color-text-inverse)]'
-              : 'border-2 border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-sage)]'
-          }`}
-          aria-label="Modo decorar"
-        >
-          <Palette size={19} strokeWidth={2.5} />
-        </button>
-      )}
-
-      {modoDecorar && !esEspectador && (
-        <StickerBook
-          stickers={stickerAssets}
-          onAbrirLibreria={() => setMostrarLibreriaStickers(true)}
-          onAgregarNota={async () => {
-            if (!userId || !ownerId) return;
-            await crearNotaLocal({
-              calendarioOwnerId: ownerId,
-              colocadoPorUserId: userId,
-              targetType: 'mes',
-              targetMes: format(fechaAncla, 'yyyy-MM'),
-            });
-            setDecoTick((t) => t + 1);
-            subirNotasPendientes().catch((err) => console.error(err));
-          }}
-          onIniciarArrastreDesdeTray={(assetId, x, y) => setArrastreTray({ assetId, x, y })}
-          onCerrarModoDecorar={() => setModoDecorar(false)}
-        />
+        <>
+          <StickerBook
+            stickers={stickerAssets}
+            oculto={arrastreDecoActivo}
+            onAbrirLibreria={() => setMostrarLibreriaStickers(true)}
+            onIniciarArrastreDesdeTray={(assetId, x, y) => setArrastreTray({ assetId, x, y })}
+          />
+          <NotesStack
+            oculto={arrastreDecoActivo}
+            onCrearNota={async () => {
+              if (!userId || !ownerId) return;
+              await crearNotaLocal({
+                calendarioOwnerId: ownerId,
+                colocadoPorUserId: userId,
+                targetType: 'mes',
+                targetMes: format(fechaAncla, 'yyyy-MM'),
+              });
+              setDecoTick((t) => t + 1);
+              subirNotasPendientes().catch((err) => console.error(err));
+            }}
+          />
+        </>
       )}
 
       {mostrarLibreriaStickers && userId && ownerId && (

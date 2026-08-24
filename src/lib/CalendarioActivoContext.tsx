@@ -12,6 +12,8 @@ import { descargarDesdeNube } from './localData';
 const STORAGE_KEY = 'nc_calendario_activo_owner_id';
 const INTERVALO_SYNC_MS = 45_000;
 
+const LAST_USER_KEY = 'nc_last_user_id';
+
 export type EstadoSync = 'idle' | 'syncing' | 'offline' | 'error';
 
 type ContextoCalendario = {
@@ -25,6 +27,7 @@ type ContextoCalendario = {
   syncTick: number; // se incrementa tras cada intento de sync — las páginas lo usan como señal para recargar sus datos locales
   sincronizarAhora: () => Promise<void>;
   primerSyncCompleto: boolean;
+  sinConexionInicial: boolean;
 };
 
 const Contexto = createContext<ContextoCalendario | null>(null);
@@ -40,6 +43,8 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
   const router = useRouter(); 
   const [primerSyncCompleto, setPrimerSyncCompleto] = useState(false);
 
+  const [sinConexionInicial, setSinConexionInicial] = useState(false);
+
   // Evita sync solapados si el usuario toca el botón varias veces seguidas
   // o si dos disparadores (intervalo + visibilitychange) coinciden.
   const sincronizandoRef = useRef(false);
@@ -54,21 +59,53 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) {
-        router.push('/login');
-        return;
-      }
-      const uid = data.session.user.id;
+    async function iniciar() {
       try {
-        await ensureDeviceRegistered(uid);
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          const uid = data.session.user.id;
+          try { localStorage.setItem(LAST_USER_KEY, uid); } catch {}
+          try {
+            await ensureDeviceRegistered(uid);
+          } catch (err) {
+            console.error('Error registrando dispositivo:', err);
+          }
+          setUserId(uid);
+          setSinConexionInicial(false);
+          await cargarOpciones(uid);
+          setCargando(false);
+          return;
+        }
+
+        // No hay sesión según Supabase. Si estamos offline y ya hubo una
+        // sesión antes en este dispositivo, entra igual con los datos
+        // locales — pedir login no serviría de nada sin conexión.
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const uidGuardado = localStorage.getItem(LAST_USER_KEY);
+          if (uidGuardado) {
+            setUserId(uidGuardado);
+            setSinConexionInicial(true);
+            await cargarOpciones(uidGuardado);
+            setCargando(false);
+            return;
+          }
+        }
+
+        router.push('/login');
       } catch (err) {
-        console.error('Error registrando dispositivo:', err);
+        console.error('Error verificando sesión:', err);
+        const uidGuardado = localStorage.getItem(LAST_USER_KEY);
+        if (uidGuardado && typeof navigator !== 'undefined' && !navigator.onLine) {
+          setUserId(uidGuardado);
+          setSinConexionInicial(true);
+          await cargarOpciones(uidGuardado);
+          setCargando(false);
+        } else {
+          router.push('/login');
+        }
       }
-      setUserId(uid);
-      await cargarOpciones(uid);
-      setCargando(false);
-    });
+    }
+    iniciar();
   }, [router, cargarOpciones]);
 
   function seleccionarCalendario(ownerId: string) {
@@ -83,6 +120,7 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setEstadoSync('offline');
+      setPrimerSyncCompleto(true); // sin red no hay nada que sincronizar — no bloquear la app por esto
       return;
     }
 
@@ -151,6 +189,7 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
         syncTick,
         sincronizarAhora,
         primerSyncCompleto,
+        sinConexionInicial,
       }}
     >
       {children}
