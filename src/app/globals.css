@@ -180,3 +180,17 @@ body {
 }
 .animar-entrada { animation: fadeInUp 0.25s ease-out; }
 .animar-balanceo { animation: balanceoSuave 3.5s ease-in-out infinite; }
+
+
+/* ============================================================
+   RESPONSIVE MÓVIL — clamp() escala fluida entre pantallas
+   chicas y grandes, sin puntos de quiebre bruscos.
+   ============================================================ */
+.placa { padding-inline: clamp(6px, 2vw, 12px); }
+.placa .font-display { font-size: clamp(0.72rem, 3.2vw, 0.95rem); }
+.cinta { padding-inline: clamp(10px, 3vw, 20px); font-size: clamp(10px, 2.6vw, 12px); }
+.panel-madera { border-radius: clamp(14px, 3vw, 20px); }
+
+@media (max-width: 380px) {
+  .header-icono-btn { width: 28px; height: 28px; }
+}

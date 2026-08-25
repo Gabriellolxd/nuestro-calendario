@@ -333,7 +333,7 @@ export default function CalendarioPage() {
     <div className="min-h-screen bg-[var(--color-bg)] pb-24 textura-cozy">
       <BannerSinConexion />
       <div className="sticky top-0 z-40 border-b-[3px] border-[var(--color-wood-dark)] bg-[var(--color-bg-elevated)]">
-        <div className="relative flex items-center justify-between px-4 py-2">
+        <div className="relative flex items-center justify-between px-2 py-2 sm:px-4">
           <MusicButton />
 
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 placa flex items-center gap-2 px-2 py-1.5">
@@ -362,7 +362,7 @@ export default function CalendarioPage() {
             </button>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1">
             <SyncStatusButton />
             <ConflictosBadge
               onResuelto={() => {
@@ -429,7 +429,8 @@ export default function CalendarioPage() {
             <DecorationLayer
               calendarioOwnerId={ownerId}
               colocadoPorUserId={userId!}
-              targetMes={format(fechaAncla, 'yyyy-MM')}
+              dias={diasMes}
+              mesActual={fechaAncla}
               editable={!esEspectador}
               stickerAssets={stickerAssets}
               refreshTick={decoTick}
@@ -484,19 +485,28 @@ export default function CalendarioPage() {
         <>
           <StickerBook
             stickers={stickerAssets}
+            userId={userId!}
             oculto={arrastreDecoActivo}
             onAbrirLibreria={() => setMostrarLibreriaStickers(true)}
             onIniciarArrastreDesdeTray={(assetId, x, y) => setArrastreTray({ assetId, x, y })}
+            onStickerEliminado={async () => {
+              if (!userId || !ownerId) return;
+              const ids = [userId, ownerId].filter((v, i, arr) => arr.indexOf(v) === i);
+              setStickerAssets(await obtenerStickersLocal(ids));
+            }}
           />
           <NotesStack
             oculto={arrastreDecoActivo}
             onCrearNota={async () => {
               if (!userId || !ownerId) return;
+              const hoyISO = format(ahoraEcuador(), 'yyyy-MM-dd');
+              const diasISO = diasMes.map((d) => format(d, 'yyyy-MM-dd'));
+              const diaDestino = diasISO.includes(hoyISO) ? hoyISO : diasISO[0];
               await crearNotaLocal({
                 calendarioOwnerId: ownerId,
                 colocadoPorUserId: userId,
-                targetType: 'mes',
-                targetMes: format(fechaAncla, 'yyyy-MM'),
+                targetType: 'dia',
+                targetDia: diaDestino,
               });
               setDecoTick((t) => t + 1);
               subirNotasPendientes().catch((err) => console.error(err));
@@ -511,12 +521,14 @@ export default function CalendarioPage() {
           idsCalendariosVisibles={[userId, ownerId].filter((v, i, arr) => arr.indexOf(v) === i)}
           onClose={() => setMostrarLibreriaStickers(false)}
           onElegirParaColocar={async (assetId) => {
+            const hoyISO = format(ahoraEcuador(), 'yyyy-MM-dd');
+            const diasISO = diasMes.map((d) => format(d, 'yyyy-MM-dd'));
             await colocarStickerLocal({
               calendarioOwnerId: ownerId,
               colocadoPorUserId: userId,
               stickerAssetId: assetId,
-              targetType: 'mes',
-              targetMes: format(fechaAncla, 'yyyy-MM'),
+              targetType: 'dia',
+              targetDia: diasISO.includes(hoyISO) ? hoyISO : diasISO[0],
             });
             setDecoTick((t) => t + 1);
             subirStickersPendientes().catch((err) => console.error(err));
@@ -606,7 +618,7 @@ function VistaMes({
             <div
               key={dia.toISOString()}
               onClick={() => onCrear(dia)}
-              className={`relative flex min-h-[100px] cursor-pointer flex-col border-b border-r border-[var(--color-border)]/60 p-1.5 transition-colors ${
+              className={`relative flex min-h-[68px] sm:min-h-[100px] cursor-pointer flex-col border-b border-r border-[var(--color-border)]/60 p-1 sm:p-1.5 transition-colors ${
                 dentroDelMes ? 'bg-[var(--color-bg-elevated)]' : 'bg-[var(--color-surface)]/40 opacity-50'
               } ${esSeleccionado && !esHoy ? 'bg-[var(--color-primary-soft)]' : ''} ${(i + 1) % 7 === 0 ? 'border-r-0' : ''}`}
             >
@@ -646,7 +658,7 @@ function VistaMes({
                       e.stopPropagation();
                       onEditar(oc);
                     }}
-                    className="flex flex-1 min-h-0 items-center overflow-hidden rounded-md px-1.5 text-[9px] font-semibold text-white shadow-sm"
+                    className="flex flex-1 min-h-0 items-center overflow-hidden rounded-md px-1 text-[7px] sm:px-1.5 sm:text-[9px] font-semibold text-white shadow-sm"
                     style={{ backgroundColor: oc.hex_color, transform: `rotate(${idx % 2 === 0 ? -0.6 : 0.6}deg)` }}
                   >
                     <span className="truncate">{oc.titulo}</span>

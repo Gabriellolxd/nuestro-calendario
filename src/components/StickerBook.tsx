@@ -2,23 +2,40 @@
 'use client';
 
 import { useState } from 'react';
-import { BookOpen, Upload, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { BookOpen, Upload, X, Trash2, AlertTriangle } from 'lucide-react';
 import type { StickerAssetLocal } from '@/lib/db';
-import { urlParaSticker } from '@/lib/stickersLocal';
+import { urlParaSticker, eliminarStickerLocal, subirStickersPendientes } from '@/lib/stickersLocal';
 import { playSound } from '@/lib/soundManager';
+import { STICKERS_PREDEFINIDOS } from '@/lib/stickersPredefinidos';
 
 const POR_LADO = 6;
 
 type Props = {
   stickers: StickerAssetLocal[];
+  userId: string;
   oculto: boolean;
   onAbrirLibreria: () => void;
   onIniciarArrastreDesdeTray: (assetId: string, clientX: number, clientY: number) => void;
+  onStickerEliminado: () => void;
 };
 
-export default function StickerBook({ stickers, oculto, onAbrirLibreria, onIniciarArrastreDesdeTray }: Props) {
+export default function StickerBook({
+  stickers,
+  userId,
+  oculto,
+  onAbrirLibreria,
+  onIniciarArrastreDesdeTray,
+  onStickerEliminado,
+}: Props) {
   const [abierto, setAbierto] = useState(false);
   const [spread, setSpread] = useState(0);
+  const [modoEliminar, setModoEliminar] = useState(false);
+  const [avisoNoPermitido, setAvisoNoPermitido] = useState(false);
+  const [confirmar, setConfirmar] = useState<StickerAssetLocal | null>(null);
+  const [montado, setMontado] = useState(false);
+
+  useState(() => setMontado(true));
 
   const porSpread = POR_LADO * 2;
   const totalSpreads = Math.max(1, Math.ceil(stickers.length / porSpread));
@@ -28,7 +45,14 @@ export default function StickerBook({ stickers, oculto, onAbrirLibreria, onInici
 
   function toggleAbierto() {
     playSound(abierto ? 'cerrar_libro' : 'abrir_libro');
+    setModoEliminar(false);
     setAbierto((a) => !a);
+  }
+
+  function toggleModoEliminar() {
+    playSound('click');
+    setModoEliminar((m) => !m);
+    setAvisoNoPermitido(false);
   }
 
   function pasarPagina(dir: 1 | -1) {
@@ -36,8 +60,52 @@ export default function StickerBook({ stickers, oculto, onAbrirLibreria, onInici
     setSpread((s) => Math.min(totalSpreads - 1, Math.max(0, s + dir)));
   }
 
+  function handleClickStickerEnModoEliminar(sticker: StickerAssetLocal) {
+    // Un predefinido "vivo" (sigue en el manifiesto) no se puede borrar
+    // desde aquí porque se regeneraría solo al reiniciar la app. Pero uno
+    // que YA NO está en el manifiesto (huérfano, como Creeper en tu caso)
+    // sí debe poder eliminarse — nunca se va a regenerar.
+    const sigueEnManifiesto = sticker.es_predefinido && STICKERS_PREDEFINIDOS.some((p) => p.archivo === sticker.storage_path);
+    if (sticker.owner_user_id !== userId || sigueEnManifiesto) {
+      setAvisoNoPermitido(true);
+      setTimeout(() => setAvisoNoPermitido(false), 2200);
+      return;
+    }
+    setConfirmar(sticker);
+  }
+
+  async function confirmarEliminacion() {
+    if (!confirmar) return;
+    await eliminarStickerLocal(confirmar.id);
+    playSound('eliminar');
+    subirStickersPendientes().catch((err) => console.error(err));
+    setConfirmar(null);
+    onStickerEliminado();
+  }
+
   function celda(sticker: StickerAssetLocal | undefined, key: string) {
     if (!sticker) return <div key={key} className="aspect-square rounded-lg bg-black/5" />;
+
+    if (modoEliminar) {
+      return (
+        <button
+          key={sticker.id}
+          onClick={() => handleClickStickerEnModoEliminar(sticker)}
+          className="group relative aspect-square w-full rounded-lg bg-[#f4e9d4] p-1.5 transition-transform active:scale-95"
+        >
+          <img
+            src={urlParaSticker(sticker)}
+            alt={sticker.nombre}
+            className="h-full w-full object-contain transition-opacity group-hover:opacity-20"
+            draggable={false}
+          />
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+            <Trash2 size={20} className="text-[var(--color-danger)]" strokeWidth={2.5} />
+          </span>
+        </button>
+      );
+    }
+
     return (
       <img
         key={sticker.id}
@@ -55,66 +123,112 @@ export default function StickerBook({ stickers, oculto, onAbrirLibreria, onInici
   }
 
   return (
-    <div
-      className="fixed bottom-0 left-[38%] z-40 -translate-x-1/2 transition-all duration-300"
-      style={{
-        transform: oculto ? 'translate(-50%, 130%)' : abierto ? 'translate(-50%, 0%)' : 'translate(-50%, calc(100% - 40px))',
-        opacity: oculto ? 0 : 1,
-        transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-      }}
-    >
-      <button
-        onClick={toggleAbierto}
-        className="textura-cuero relative mx-auto flex h-10 w-40 items-center justify-center gap-1.5 rounded-t-2xl border-2 border-b-0 border-[var(--color-wood-dark)] shadow-[0_-3px_10px_rgba(0,0,0,0.25)]"
-        style={{ backgroundColor: 'var(--color-leather)' }}
-      >
-        <BookOpen size={14} className="text-[var(--color-gold-soft)]" />
-        <span className="font-display text-xs font-bold tracking-wide text-[var(--color-gold-soft)]">Mis Stickers</span>
-      </button>
-
+    <>
       <div
-        className="textura-cuero mx-auto w-[92vw] max-w-md overflow-hidden rounded-t-2xl border-2 border-t-0 border-[var(--color-wood-dark)]"
-        style={{ backgroundColor: 'var(--color-leather)' }}
+        className="fixed bottom-0 z-40 transition-all duration-300"
+        style={{
+          left: '38%',
+          transform: `translateX(-50%) ${oculto ? 'translateY(130%)' : abierto ? 'translateY(0%)' : 'translateY(calc(100% - 40px))'}`,
+          opacity: oculto ? 0 : 1,
+          transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+        }}
       >
-        <div className="flex items-center justify-between px-3 pt-2">
-          <span className="font-display text-[11px] text-[var(--color-gold-soft)]/80">pág. {spread + 1}/{totalSpreads}</span>
-          <button onClick={onAbrirLibreria} className="flex items-center gap-1 rounded-full bg-black/15 px-2.5 py-1 text-[10px] font-medium text-[var(--color-gold-soft)]">
-            <Upload size={11} /> Subir
-          </button>
-        </div>
+        <button
+          onClick={toggleAbierto}
+          className="textura-cuero relative mx-auto flex h-10 w-36 items-center justify-center gap-1.5 rounded-t-2xl border-2 border-b-0 border-[var(--color-wood-dark)] shadow-[0_-3px_10px_rgba(0,0,0,0.25)] sm:w-40"
+          style={{ backgroundColor: 'var(--color-leather)' }}
+        >
+          <BookOpen size={14} className="text-[var(--color-gold-soft)]" />
+          <span className="font-display text-xs font-bold tracking-wide text-[var(--color-gold-soft)]">Mis Stickers</span>
+        </button>
 
-        <div key={spread} className="animar-entrada relative mx-3 my-2 grid grid-cols-2 gap-3 rounded-xl border-2 border-[var(--color-wood-dark)] bg-[#f4e9d4] p-3">
-          <div className="grid grid-cols-3 gap-2 border-r border-dashed border-[var(--color-wood-dark)]/30 pr-3">
-            {Array.from({ length: POR_LADO }).map((_, i) => celda(paginaIzq[i], `izq-${i}`))}
-          </div>
-          <div className="grid grid-cols-3 gap-2 pl-1">
-            {Array.from({ length: POR_LADO }).map((_, i) => celda(paginaDer[i], `der-${i}`))}
-          </div>
-
-          {spread > 0 && (
+        <div
+          className="textura-cuero mx-auto w-[88vw] max-w-md overflow-hidden rounded-t-2xl border-2 border-t-0 border-[var(--color-wood-dark)]"
+          style={{ backgroundColor: 'var(--color-leather)' }}
+        >
+          <div className="flex items-center justify-between px-3 pt-2">
             <button
-              onClick={() => pasarPagina(-1)}
-              className="absolute bottom-1 left-1 h-6 w-6"
-              style={{ clipPath: 'polygon(0 100%, 100% 100%, 0 0)', background: 'linear-gradient(135deg, #e2cfa5, #b9995f)' }}
-              aria-label="Página anterior"
-            />
-          )}
-          {spread < totalSpreads - 1 && (
-            <button
-              onClick={() => pasarPagina(1)}
-              className="absolute bottom-1 right-1 h-6 w-6"
-              style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 0)', background: 'linear-gradient(225deg, #e2cfa5, #b9995f)' }}
-              aria-label="Página siguiente"
-            />
-          )}
-        </div>
+              onClick={toggleModoEliminar}
+              className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+                modoEliminar ? 'bg-[var(--color-danger)] text-white' : 'bg-black/15 text-[var(--color-gold-soft)]'
+              }`}
+              aria-label="Eliminar stickers"
+              title="Eliminar stickers de tu librería"
+            >
+              <Trash2 size={13} />
+            </button>
+            <span className="font-display text-[11px] text-[var(--color-gold-soft)]/80">pág. {spread + 1}/{totalSpreads}</span>
+            <button onClick={onAbrirLibreria} className="flex items-center gap-1 rounded-full bg-black/15 px-2.5 py-1 text-[10px] font-medium text-[var(--color-gold-soft)]">
+              <Upload size={11} /> Subir
+            </button>
+          </div>
 
-        <div className="flex justify-center pb-2">
-          <button onClick={toggleAbierto} className="rounded-full bg-black/15 p-1.5 text-[var(--color-gold-soft)]">
-            <X size={13} />
-          </button>
+          {modoEliminar && (
+            <p className="animar-entrada mx-3 mt-2 rounded-lg bg-black/20 px-2.5 py-1.5 text-center text-[10px] font-medium text-[var(--color-gold-soft)]">
+              {avisoNoPermitido
+                ? 'No puedes eliminar este sticker (no es tuyo o es predefinido)'
+                : 'Selecciona un sticker para eliminarlo de tu libreta'}
+            </p>
+          )}
+
+          <div key={spread} className="animar-entrada relative mx-3 my-2 grid grid-cols-2 gap-3 rounded-xl border-2 border-[var(--color-wood-dark)] bg-[#f4e9d4] p-3">
+            <div className="grid grid-cols-3 gap-2 border-r border-dashed border-[var(--color-wood-dark)]/30 pr-3">
+              {Array.from({ length: POR_LADO }).map((_, i) => celda(paginaIzq[i], `izq-${i}`))}
+            </div>
+            <div className="grid grid-cols-3 gap-2 pl-1">
+              {Array.from({ length: POR_LADO }).map((_, i) => celda(paginaDer[i], `der-${i}`))}
+            </div>
+
+            {spread > 0 && (
+              <button
+                onClick={() => pasarPagina(-1)}
+                className="absolute bottom-1 left-1 h-6 w-6"
+                style={{ clipPath: 'polygon(0 100%, 100% 100%, 0 0)', background: 'linear-gradient(135deg, #e2cfa5, #b9995f)' }}
+                aria-label="Página anterior"
+              />
+            )}
+            {spread < totalSpreads - 1 && (
+              <button
+                onClick={() => pasarPagina(1)}
+                className="absolute bottom-1 right-1 h-6 w-6"
+                style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 0)', background: 'linear-gradient(225deg, #e2cfa5, #b9995f)' }}
+                aria-label="Página siguiente"
+              />
+            )}
+          </div>
+
+          <div className="flex justify-center pb-2">
+            <button onClick={toggleAbierto} className="rounded-full bg-black/15 p-1.5 text-[var(--color-gold-soft)]">
+              <X size={13} />
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {montado && confirmar && createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--color-wood-dark)]/60 px-4" onClick={() => setConfirmar(null)}>
+          <div className="panel-madera w-full max-w-xs animar-entrada p-5 text-center" onClick={(e) => e.stopPropagation()}>
+            <AlertTriangle size={28} className="mx-auto mb-2 text-[var(--color-danger)]" />
+            <img src={urlParaSticker(confirmar)} alt="" className="mx-auto mb-2 h-14 w-14 object-contain" />
+            <p className="mb-4 text-sm font-semibold text-[var(--color-text)]">¿Enserio deseas eliminarlo?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmar(null)}
+                className="flex-1 rounded-xl border-2 border-[var(--color-border)] py-2 text-sm text-[var(--color-text-muted)]"
+              >
+                No
+              </button>
+              <button
+                onClick={confirmarEliminacion}
+                className="boton-tallado flex-1 rounded-xl bg-[var(--color-danger)] py-2 text-sm font-semibold text-white"
+              >
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }

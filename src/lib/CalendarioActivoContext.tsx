@@ -26,6 +26,7 @@ type ContextoCalendario = {
   ultimaSync: Date | null;
   syncTick: number; // se incrementa tras cada intento de sync — las páginas lo usan como señal para recargar sus datos locales
   sincronizarAhora: () => Promise<void>;
+  recargarCalendarios: () => Promise<void>;  
   primerSyncCompleto: boolean;
   sinConexionInicial: boolean;
 };
@@ -107,6 +108,10 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
     }
     iniciar();
   }, [router, cargarOpciones]);
+
+  const recargarCalendarios = useCallback(async () => {
+    if (userId) await cargarOpciones(userId);
+  }, [userId, cargarOpciones]);
 
   function seleccionarCalendario(ownerId: string) {
     const encontrado = opciones.find((o) => o.ownerId === ownerId);
@@ -190,6 +195,7 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
         sincronizarAhora,
         primerSyncCompleto,
         sinConexionInicial,
+        recargarCalendarios,
       }}
     >
       {children}

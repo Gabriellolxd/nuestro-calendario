@@ -274,3 +274,17 @@ export async function descargarStickersDesdeNube(userIds: string[], calendarioOw
     console.error('Error descargando stickers:', err);
   }
 }
+
+// Migración: convierte un sticker viejo (target_type 'mes') a uno
+// anclado a un día específico (cuadrante).
+export async function migrarPlacementADia(id: string, targetDia: string, posX: number, posY: number) {
+  await db.sticker_placements.update(id, {
+    target_type: 'dia',
+    target_dia: targetDia,
+    target_mes: null,
+    pos_x: posX,
+    pos_y: posY,
+    client_updated_at: new Date().toISOString(),
+    synced: 0,
+  });
+}

@@ -29,7 +29,7 @@ export async function crearNotaLocal(datos: {
     color: datos.color ?? '#fef3c7',
     pos_x: datos.posX ?? 50,
     pos_y: datos.posY ?? 50,
-    rotacion: (Math.random() * 8 - 4), // pequeña inclinación aleatoria, se ve más "pegado a mano"
+    rotacion: Math.random() * 8 - 4,
     z_index: 1,
     client_updated_at: new Date().toISOString(),
     deleted_at: null,
@@ -54,15 +54,32 @@ export async function eliminarNotaLocal(id: string) {
   });
 }
 
-export async function obtenerNotasLocal(calendarioOwnerId: string, targetType: StickerTargetType, targetKey: string | null): Promise<StickyNoteLocal[]> {
+// Todas las notas del calendario, sin filtrar (usado por la migración y
+// por consultas multi-día).
+export async function obtenerTodasLasNotasLocal(calendarioOwnerId: string): Promise<StickyNoteLocal[]> {
   const todas = await db.sticky_notes.where('calendario_owner_id').equals(calendarioOwnerId).toArray();
-  return todas.filter((n) => {
-    if (n.deleted_at !== null) return false;
-    if (n.target_type !== targetType) return false;
-    if (targetType === 'mes') return n.target_mes === targetKey;
-    if (targetType === 'dia') return n.target_dia === targetKey;
-    if (targetType === 'evento') return n.target_event_id === targetKey;
-    return false;
+  return todas.filter((n) => n.deleted_at === null);
+}
+
+// Notas ancladas a cualquiera de los días visibles en la grilla actual
+// (sistema de cuadrantes: cada nota vive en un día específico).
+export async function obtenerNotasParaDias(calendarioOwnerId: string, diasISO: string[]): Promise<StickyNoteLocal[]> {
+  const todas = await obtenerTodasLasNotasLocal(calendarioOwnerId);
+  const set = new Set(diasISO);
+  return todas.filter((n) => n.target_type === 'dia' && n.target_dia && set.has(n.target_dia));
+}
+
+// Migración: convierte una nota vieja (target_type 'mes', posición libre
+// sobre todo el mes) a una nota anclada a un día específico (cuadrante).
+export async function migrarNotaADia(id: string, targetDia: string, posX: number, posY: number) {
+  await db.sticky_notes.update(id, {
+    target_type: 'dia',
+    target_dia: targetDia,
+    target_mes: null,
+    pos_x: posX,
+    pos_y: posY,
+    client_updated_at: new Date().toISOString(),
+    synced: 0,
   });
 }
 
