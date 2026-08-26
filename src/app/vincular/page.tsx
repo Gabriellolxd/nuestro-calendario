@@ -1,5 +1,4 @@
 // src/app/vincular/page.tsx
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -94,14 +93,13 @@ export default function VincularPage() {
           Comparte tu calendario
         </h1>
 
-        {/* Notitas manuales en vez del párrafo explicativo */}
         <div className="my-8 flex items-center justify-center gap-8 py-2">
           <div
             className="w-40 -rotate-5 rounded-lg border-2 border-[var(--color-border)] bg-[var(--color-gold-soft)] p-2 text-center"
             style={{ boxShadow: 'var(--sombra-panel-suave)' }}
           >
             <p className="font-hand text-[17px] leading-tight text-[var(--color-wood-dark)]">
-              <strong>¿Quieres compartir tu calendario?</strong> 
+              <strong>¿Quieres compartir tu calendario?</strong>
             </p>
             <p className="font-hand text-[17px] leading-tight text-[var(--color-wood-dark)]">
               ¡Pega aquí el código de esa persona!
@@ -112,7 +110,7 @@ export default function VincularPage() {
             style={{ boxShadow: 'var(--sombra-panel-suave)' }}
           >
             <p className="font-hand text-[17px] leading-tight text-[var(--color-wood-dark)]">
-              <strong>¿Quieres ver otro calendario?</strong>  
+              <strong>¿Quieres ver otro calendario?</strong>
             </p>
             <p className="font-hand text-[17px] leading-tight text-[var(--color-wood-dark)]">
               ¡Mándale tu código a esa persona!

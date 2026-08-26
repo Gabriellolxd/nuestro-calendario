@@ -9,7 +9,6 @@ import { format } from '@/lib/dates';
 import {
   obtenerPlacementsLocal,
   colocarStickerLocal,
-  moverStickerLocal,
   actualizarTransformStickerLocal,
   quitarStickerLocal,
   urlParaSticker,
@@ -30,8 +29,8 @@ import { playSound } from '@/lib/soundManager';
 type Props = {
   calendarioOwnerId: string;
   colocadoPorUserId: string;
-  dias: Date[]; // grilla del mes visible (siempre 7 columnas) — base del sistema de cuadrantes
-  mesActual: Date; // para la migración de decoraciones viejas ('mes') de este mes específico
+  dias: Date[];
+  mesActual: Date;
   editable: boolean;
   stickerAssets: StickerAssetLocal[];
   refreshTick: number;
@@ -51,7 +50,6 @@ function filasDeLaGrilla(dias: Date[]): number {
   return Math.max(1, Math.ceil(dias.length / COLUMNAS));
 }
 
-// Día + índice de celda a partir de una fecha ISO.
 function celdaParaFecha(dias: Date[], fechaISO: string) {
   const idx = dias.findIndex((d) => format(d, 'yyyy-MM-dd') === fechaISO);
   if (idx === -1) return null;
@@ -59,8 +57,6 @@ function celdaParaFecha(dias: Date[], fechaISO: string) {
   return { col: idx % COLUMNAS, row: Math.floor(idx / COLUMNAS), filas };
 }
 
-// Posición absoluta (% sobre TODO el contenedor) a partir de un día +
-// posición relativa dentro de esa celda (0-100).
 function posicionAbsoluta(dias: Date[], targetDia: string | null, posXCelda: number, posYCelda: number) {
   if (!targetDia) return null;
   const celda = celdaParaFecha(dias, targetDia);
@@ -72,8 +68,6 @@ function posicionAbsoluta(dias: Date[], targetDia: string | null, posXCelda: num
   };
 }
 
-// Operación inversa: a partir de una posición absoluta (0-100 sobre todo
-// el contenedor), determina a qué día cayó y la posición dentro de esa celda.
 function diaYCeldaDesdeAbsoluta(dias: Date[], xPctAbs: number, yPctAbs: number) {
   const filas = filasDeLaGrilla(dias);
   const col = Math.min(COLUMNAS - 1, Math.max(0, Math.floor((xPctAbs / 100) * COLUMNAS)));
@@ -108,13 +102,24 @@ export default function DecorationLayer({
   const [fantasma, setFantasma] = useState<{ url: string; x: number; y: number } | null>(null);
   const [modoInteraccion, setModoInteraccion] = useState<ModoInteraccion>('ninguno');
   const [montado, setMontado] = useState(false);
-  // Posición absoluta transitoria SOLO del elemento que se está
-  // arrastrando en este momento — el resto siempre se calcula desde su
-  // día+celda guardado, garantizando la misma posición en cualquier pantalla.
   const [dragVisual, setDragVisual] = useState<{ id: string; xPct: number; yPct: number } | null>(null);
+  // Ancho real de UNA celda del calendario (medido, no fijo) — la base
+  // para que el tamaño del sticker/nota escale proporcional al cuadrante,
+  // igual en cualquier pantalla.
+  const [cellWidthPx, setCellWidthPx] = useState(56);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMontado(true), []);
+
+  useEffect(() => {
+    if (!contenedorRef.current) return;
+    const obs = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setCellWidthPx(w / COLUMNAS);
+    });
+    obs.observe(contenedorRef.current);
+    return () => obs.disconnect();
+  }, []);
 
   const gestoPendiente = useRef<{ tipo: 'sticker' | 'nota'; id: string; startX: number; startY: number } | null>(null);
   const arrastrando = useRef<{ tipo: 'sticker' | 'nota'; id: string } | null>(null);
@@ -129,15 +134,13 @@ export default function DecorationLayer({
   const diasISO = dias.map((d) => format(d, 'yyyy-MM-dd'));
 
   const cargar = useCallback(async () => {
-    const [todosPlacements, notasDeLosDias] = await Promise.all([
-      obtenerPlacementsLocal(calendarioOwnerId),
-      obtenerNotasParaDias(calendarioOwnerId, diasISO),
-    ]);
-
-    // Migración silenciosa: decoraciones del sistema viejo ('mes', posición
-    // libre) que correspondan al mes que se está viendo ahora se convierten
-    // a cuadrantes (anclaje por día), preservando su posición aproximada.
     const mesActualStr = format(mesActual, 'yyyy-MM');
+
+    // Migración silenciosa: decoraciones del sistema viejo (target_type
+    // 'mes') se convierten UNA VEZ a cuadrantes, reutilizando la misma
+    // función atómica que usamos para mover algo a un día nuevo — así no
+    // hay dos caminos de código distintos que puedan desincronizarse.
+    const todosPlacements = await obtenerPlacementsLocal(calendarioOwnerId);
     const legacyPlacements = todosPlacements.filter((p) => p.target_type === 'mes' && p.target_mes === mesActualStr);
     for (const legacy of legacyPlacements) {
       const destino = diaYCeldaDesdeAbsoluta(dias, legacy.pos_x, legacy.pos_y);
@@ -156,13 +159,12 @@ export default function DecorationLayer({
       subirNotasPendientes().catch(() => {});
     }
 
-    setPlacements(
-      (legacyPlacements.length > 0
-        ? await obtenerPlacementsLocal(calendarioOwnerId)
-        : todosPlacements
-      ).filter((p) => p.target_type === 'dia' && p.target_dia && diasISO.includes(p.target_dia))
-    );
-    setNotas(legacyNotas.length > 0 ? await obtenerNotasParaDias(calendarioOwnerId, diasISO) : notasDeLosDias);
+    const [placementsFinal, notasFinal] = await Promise.all([
+      obtenerPlacementsLocal(calendarioOwnerId),
+      obtenerNotasParaDias(calendarioOwnerId, diasISO),
+    ]);
+    setPlacements(placementsFinal.filter((p) => p.target_type === 'dia' && p.target_dia && diasISO.includes(p.target_dia)));
+    setNotas(notasFinal);
     // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
   }, [calendarioOwnerId, diasISO.join(','), format(mesActual, 'yyyy-MM')]);
 
@@ -239,64 +241,6 @@ export default function DecorationLayer({
     const distanciaInicial = Math.max(1, Math.hypot(clientX - x, clientY - y));
     escalando.current = { id, centroX: x, centroY: y, distanciaInicial, escalaInicial: p.escala };
     setModoInteraccion('escalando');
-  }
-
-  function distanciaEntreToques(t1: React.Touch, t2: React.Touch) {
-    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-  }
-  function anguloEntreToques(t1: React.Touch, t2: React.Touch) {
-    return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
-  }
-
-  function manejarTouchStart(tipo: 'sticker' | 'nota', id: string, e: React.TouchEvent) {
-    if (!editable || e.touches.length !== 2) return;
-    e.preventDefault();
-    gestoPendiente.current = null;
-    arrastrando.current = null;
-    const item = tipo === 'sticker' ? placements.find((p) => p.id === id) : notas.find((n) => n.id === id);
-    if (!item) return;
-    dosDedos.current = {
-      tipo, id,
-      distanciaInicial: distanciaEntreToques(e.touches[0], e.touches[1]),
-      anguloInicial: anguloEntreToques(e.touches[0], e.touches[1]),
-      escalaInicial: tipo === 'sticker' ? (item as StickerPlacementLocal).escala : 1,
-      rotacionInicial: item.rotacion,
-    };
-    if (decoDragRef) decoDragRef.current = true;
-    setSeleccionId(id);
-    setModoInteraccion(tipo === 'sticker' ? 'escalando' : 'girando');
-  }
-
-  function manejarTouchMove(e: React.TouchEvent) {
-    if (!dosDedos.current || e.touches.length !== 2) return;
-    e.preventDefault();
-    const { tipo, id, distanciaInicial, anguloInicial, escalaInicial, rotacionInicial } = dosDedos.current;
-    const nuevaDistancia = distanciaEntreToques(e.touches[0], e.touches[1]);
-    const nuevoAngulo = anguloEntreToques(e.touches[0], e.touches[1]);
-    const nuevaRotacion = rotacionInicial + ((nuevoAngulo - anguloInicial) * 180) / Math.PI;
-
-    if (tipo === 'sticker') {
-      const nuevaEscala = Math.min(3, Math.max(0.4, escalaInicial * (nuevaDistancia / distanciaInicial)));
-      setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, escala: nuevaEscala, rotacion: nuevaRotacion } : p)));
-    } else {
-      setNotas((prev) => prev.map((n) => (n.id === id ? { ...n, rotacion: nuevaRotacion } : n)));
-    }
-  }
-
-  async function manejarTouchEnd(e: React.TouchEvent) {
-    if (!dosDedos.current || e.touches.length >= 2) return;
-    const { tipo, id } = dosDedos.current;
-    dosDedos.current = null;
-    setModoInteraccion('ninguno');
-    if (decoDragRef) decoDragRef.current = false;
-    playSound('pegar');
-    if (tipo === 'sticker') {
-      const p = placements.find((pl) => pl.id === id);
-      if (p) { await actualizarTransformStickerLocal(id, { escala: p.escala, rotacion: p.rotacion }); subirStickersPendientes().catch(() => {}); }
-    } else {
-      const n = notas.find((nn) => nn.id === id);
-      if (n) { await actualizarNotaLocal(id, { rotacion: n.rotacion }); subirNotasPendientes().catch(() => {}); }
-    }
   }
 
   function mover(clientX: number, clientY: number) {
@@ -415,17 +359,16 @@ export default function DecorationLayer({
       if (!destino) return;
 
       playSound('pegar');
+      // Se reutiliza la MISMA función atómica que la migración — un solo
+      // camino de código para "algo cambió de día", sin lógica duplicada
+      // que pueda desincronizarse entre sí.
       if (tipo === 'sticker') {
+        await migrarPlacementADia(id, destino.fechaISO, destino.posXCelda, destino.posYCelda);
         setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, target_dia: destino.fechaISO, pos_x: destino.posXCelda, pos_y: destino.posYCelda } : p)));
-        await moverStickerLocal(id, destino.posXCelda, destino.posYCelda);
-        await actualizarTransformStickerLocal(id, {}); // no-op de refresco, evita duplicar lógica
-        // Guarda también el nuevo día (moverStickerLocal solo actualiza pos_x/pos_y):
-        const { db } = await import('@/lib/db');
-        await db.sticker_placements.update(id, { target_dia: destino.fechaISO, synced: 0 });
         subirStickersPendientes().catch(() => {});
       } else {
+        await migrarNotaADia(id, destino.fechaISO, destino.posXCelda, destino.posYCelda);
         setNotas((prev) => prev.map((n) => (n.id === id ? { ...n, target_dia: destino.fechaISO, pos_x: destino.posXCelda, pos_y: destino.posYCelda } : n)));
-        await actualizarNotaLocal(id, { target_dia: destino.fechaISO, pos_x: destino.posXCelda, pos_y: destino.posYCelda });
         subirNotasPendientes().catch(() => {});
       }
     } finally {
@@ -444,6 +387,82 @@ export default function DecorationLayer({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placements, notas, fantasma, sobreBasurero, dragVisual]);
+
+  // Gestos de 2 dedos — escuchados a nivel de VENTANA (no del sticker),
+  // porque cuando pellizcas, el segundo dedo casi nunca cae exactamente
+  // sobre el elemento pequeño; solo se activa si un dedo YA estaba
+  // tocando un sticker/nota (gestoPendiente/arrastrando).
+  useEffect(() => {
+    function onTouchStartGlobal(e: TouchEvent) {
+      if (!editable || e.touches.length !== 2) return;
+      const activo = gestoPendiente.current || arrastrando.current;
+      if (!activo) return;
+      e.preventDefault();
+
+      const { tipo, id } = activo;
+      gestoPendiente.current = null;
+      arrastrando.current = null;
+      setDragVisual(null);
+
+      const item = tipo === 'sticker' ? placements.find((p) => p.id === id) : notas.find((n) => n.id === id);
+      if (!item) return;
+
+      const t1 = e.touches[0], t2 = e.touches[1];
+      dosDedos.current = {
+        tipo, id,
+        distanciaInicial: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY),
+        anguloInicial: Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX),
+        escalaInicial: tipo === 'sticker' ? (item as StickerPlacementLocal).escala : 1,
+        rotacionInicial: item.rotacion,
+      };
+      setSeleccionId(id);
+      setModoInteraccion(tipo === 'sticker' ? 'escalando' : 'girando');
+    }
+
+    function onTouchMoveGlobal(e: TouchEvent) {
+      if (!dosDedos.current || e.touches.length < 2) return;
+      e.preventDefault();
+      const { tipo, id, distanciaInicial, anguloInicial, escalaInicial, rotacionInicial } = dosDedos.current;
+      const t1 = e.touches[0], t2 = e.touches[1];
+      const nuevaDistancia = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const nuevoAngulo = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+      const nuevaRotacion = rotacionInicial + ((nuevoAngulo - anguloInicial) * 180) / Math.PI;
+      if (tipo === 'sticker') {
+        const nuevaEscala = Math.min(3, Math.max(0.4, escalaInicial * (nuevaDistancia / distanciaInicial)));
+        setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, escala: nuevaEscala, rotacion: nuevaRotacion } : p)));
+      } else {
+        setNotas((prev) => prev.map((n) => (n.id === id ? { ...n, rotacion: nuevaRotacion } : n)));
+      }
+    }
+
+    async function onTouchEndGlobal(e: TouchEvent) {
+      if (!dosDedos.current || e.touches.length >= 2) return;
+      const { tipo, id } = dosDedos.current;
+      dosDedos.current = null;
+      setModoInteraccion('ninguno');
+      if (decoDragRef) decoDragRef.current = false;
+      playSound('pegar');
+      if (tipo === 'sticker') {
+        const p = placements.find((pl) => pl.id === id);
+        if (p) { await actualizarTransformStickerLocal(id, { escala: p.escala, rotacion: p.rotacion }); subirStickersPendientes().catch(() => {}); }
+      } else {
+        const n = notas.find((nn) => nn.id === id);
+        if (n) { await actualizarNotaLocal(id, { rotacion: n.rotacion }); subirNotasPendientes().catch(() => {}); }
+      }
+    }
+
+    window.addEventListener('touchstart', onTouchStartGlobal, { passive: false });
+    window.addEventListener('touchmove', onTouchMoveGlobal, { passive: false });
+    window.addEventListener('touchend', onTouchEndGlobal);
+    window.addEventListener('touchcancel', onTouchEndGlobal);
+    return () => {
+      window.removeEventListener('touchstart', onTouchStartGlobal);
+      window.removeEventListener('touchmove', onTouchMoveGlobal);
+      window.removeEventListener('touchend', onTouchEndGlobal);
+      window.removeEventListener('touchcancel', onTouchEndGlobal);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placements, notas, editable]);
 
   useEffect(() => {
     function onGlobalPointerDown(e: PointerEvent) {
@@ -467,6 +486,8 @@ export default function DecorationLayer({
   }
 
   const mostrarBasurero = editable && (modoInteraccion === 'arrastrando' || !!fantasma);
+  const anchoSticker = Math.round(cellWidthPx * 0.62);
+  const anchoNota = Math.round(cellWidthPx * 1.15);
 
   return (
     <>
@@ -484,7 +505,6 @@ export default function DecorationLayer({
             ? { leftPct: dragVisual!.xPct, topPct: dragVisual!.yPct }
             : posicionAbsoluta(dias, p.target_dia, p.pos_x, p.pos_y);
           if (!abs) return null;
-          // "Tambaleo": pequeño balanceo mientras se arrastra, puramente visual.
           // eslint-disable-next-line react-hooks/purity
           const wobble = arrastrandoEste ? Math.sin(Date.now() / 70) * 5 : 0;
 
@@ -503,12 +523,15 @@ export default function DecorationLayer({
                   transition: modoInteraccion === 'ninguno' && !arrastrandoEste ? 'transform 0.15s ease-out' : 'none',
                 }}
                 onPointerDown={(e) => onPointerDownItem('sticker', p.id, e)}
-                onTouchStart={(e) => manejarTouchStart('sticker', p.id, e)}
-                onTouchMove={manejarTouchMove}
-                onTouchEnd={manejarTouchEnd}
                 onClick={(e) => e.stopPropagation()}
               >
-                <img src={urlParaSticker(asset)} alt={asset.nombre} className="w-14 select-none drop-shadow-md sm:w-16" draggable={false} />
+                <img
+                  src={urlParaSticker(asset)}
+                  alt={asset.nombre}
+                  style={{ width: anchoSticker }}
+                  className="select-none drop-shadow-md"
+                  draggable={false}
+                />
                 {editable && seleccionado && !arrastrandoEste && (
                   <div
                     onPointerDown={(e) => { e.stopPropagation(); iniciarEscala(p.id, e.clientX, e.clientY); }}
@@ -552,19 +575,17 @@ export default function DecorationLayer({
           return (
             <div
               key={n.id}
-              className="pointer-events-none absolute w-28 sm:w-32"
-              style={{ left: `${abs.leftPct}%`, top: `${abs.topPct}%`, zIndex: seleccionada ? 50 : n.z_index }}
+              className="pointer-events-none absolute"
+              style={{ left: `${abs.leftPct}%`, top: `${abs.topPct}%`, width: anchoNota, zIndex: seleccionada ? 50 : n.z_index }}
             >
               <div
                 data-deco-item
                 className="pointer-events-auto relative animate-[stickerPop_0.25s_ease-out]"
                 style={{
                   transform: `translate(-50%, -50%) rotate(${n.rotacion + wobble}deg) scale(${arrastrandoEste || seleccionada ? 1.08 : 1})`,
+                  touchAction: 'none',
                   transition: modoInteraccion === 'ninguno' && !arrastrandoEste ? 'transform 0.15s ease-out' : 'none',
                 }}
-                onTouchStart={(e) => manejarTouchStart('nota', n.id, e)}
-                onTouchMove={manejarTouchMove}
-                onTouchEnd={manejarTouchEnd}
                 onClick={(e) => e.stopPropagation()}
               >
                 <div
@@ -575,7 +596,7 @@ export default function DecorationLayer({
                   📌
                 </div>
                 <div
-                  className="rounded-lg p-2 pt-4 text-[10px] shadow-md sm:text-[11px]"
+                  className="rounded-lg p-2 pt-4 text-[10px] shadow-md"
                   style={{ backgroundColor: n.color }}
                   onClick={(e) => { e.stopPropagation(); if (editable) setSeleccionId(n.id); }}
                 >

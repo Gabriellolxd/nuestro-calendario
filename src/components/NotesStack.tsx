@@ -23,8 +23,9 @@ export default function NotesStack({ oculto, onCrearNota }: Props) {
 
   return (
     <div
-      className="fixed bottom-0 left-[62%] z-40 -translate-x-1/2 transition-all duration-300"
+      className="fixed bottom-0 z-40 transition-all duration-300"
       style={{
+        right: 90,
         transform: oculto ? 'translateY(130%)' : hover ? 'translateY(-10px)' : 'translateY(60%)',
         opacity: oculto ? 0 : 1,
         transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',

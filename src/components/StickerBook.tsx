@@ -6,8 +6,8 @@ import { createPortal } from 'react-dom';
 import { BookOpen, Upload, X, Trash2, AlertTriangle } from 'lucide-react';
 import type { StickerAssetLocal } from '@/lib/db';
 import { urlParaSticker, eliminarStickerLocal, subirStickersPendientes } from '@/lib/stickersLocal';
-import { playSound } from '@/lib/soundManager';
 import { STICKERS_PREDEFINIDOS } from '@/lib/stickersPredefinidos';
+import { playSound } from '@/lib/soundManager';
 
 const POR_LADO = 6;
 
@@ -61,10 +61,6 @@ export default function StickerBook({
   }
 
   function handleClickStickerEnModoEliminar(sticker: StickerAssetLocal) {
-    // Un predefinido "vivo" (sigue en el manifiesto) no se puede borrar
-    // desde aquí porque se regeneraría solo al reiniciar la app. Pero uno
-    // que YA NO está en el manifiesto (huérfano, como Creeper en tu caso)
-    // sí debe poder eliminarse — nunca se va a regenerar.
     const sigueEnManifiesto = sticker.es_predefinido && STICKERS_PREDEFINIDOS.some((p) => p.archivo === sticker.storage_path);
     if (sticker.owner_user_id !== userId || sigueEnManifiesto) {
       setAvisoNoPermitido(true);
@@ -127,15 +123,15 @@ export default function StickerBook({
       <div
         className="fixed bottom-0 z-40 transition-all duration-300"
         style={{
-          left: '38%',
-          transform: `translateX(-50%) ${oculto ? 'translateY(130%)' : abierto ? 'translateY(0%)' : 'translateY(calc(100% - 40px))'}`,
+          left: 10,
+          transform: oculto ? 'translateY(130%)' : abierto ? 'translateY(0%)' : 'translateY(calc(100% - 40px))',
           opacity: oculto ? 0 : 1,
           transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
       >
         <button
           onClick={toggleAbierto}
-          className="textura-cuero relative mx-auto flex h-10 w-36 items-center justify-center gap-1.5 rounded-t-2xl border-2 border-b-0 border-[var(--color-wood-dark)] shadow-[0_-3px_10px_rgba(0,0,0,0.25)] sm:w-40"
+          className="textura-cuero relative flex h-10 w-32 items-center justify-center gap-1.5 rounded-t-2xl border-2 border-b-0 border-[var(--color-wood-dark)] shadow-[0_-3px_10px_rgba(0,0,0,0.25)]"
           style={{ backgroundColor: 'var(--color-leather)' }}
         >
           <BookOpen size={14} className="text-[var(--color-gold-soft)]" />
@@ -143,7 +139,7 @@ export default function StickerBook({
         </button>
 
         <div
-          className="textura-cuero mx-auto w-[88vw] max-w-md overflow-hidden rounded-t-2xl border-2 border-t-0 border-[var(--color-wood-dark)]"
+          className="textura-cuero w-[min(84vw,340px)] overflow-hidden rounded-t-2xl border-2 border-t-0 border-[var(--color-wood-dark)]"
           style={{ backgroundColor: 'var(--color-leather)' }}
         >
           <div className="flex items-center justify-between px-3 pt-2">
@@ -171,11 +167,11 @@ export default function StickerBook({
             </p>
           )}
 
-          <div key={spread} className="animar-entrada relative mx-3 my-2 grid grid-cols-2 gap-3 rounded-xl border-2 border-[var(--color-wood-dark)] bg-[#f4e9d4] p-3">
-            <div className="grid grid-cols-3 gap-2 border-r border-dashed border-[var(--color-wood-dark)]/30 pr-3">
+          <div key={spread} className="animar-entrada relative mx-3 my-2 grid grid-cols-2 gap-2 rounded-xl border-2 border-[var(--color-wood-dark)] bg-[#f4e9d4] p-2.5">
+            <div className="grid grid-cols-3 gap-1.5 border-r border-dashed border-[var(--color-wood-dark)]/30 pr-2">
               {Array.from({ length: POR_LADO }).map((_, i) => celda(paginaIzq[i], `izq-${i}`))}
             </div>
-            <div className="grid grid-cols-3 gap-2 pl-1">
+            <div className="grid grid-cols-3 gap-1.5 pl-1">
               {Array.from({ length: POR_LADO }).map((_, i) => celda(paginaDer[i], `der-${i}`))}
             </div>
 
@@ -212,16 +208,10 @@ export default function StickerBook({
             <img src={urlParaSticker(confirmar)} alt="" className="mx-auto mb-2 h-14 w-14 object-contain" />
             <p className="mb-4 text-sm font-semibold text-[var(--color-text)]">¿Enserio deseas eliminarlo?</p>
             <div className="flex gap-2">
-              <button
-                onClick={() => setConfirmar(null)}
-                className="flex-1 rounded-xl border-2 border-[var(--color-border)] py-2 text-sm text-[var(--color-text-muted)]"
-              >
+              <button onClick={() => setConfirmar(null)} className="flex-1 rounded-xl border-2 border-[var(--color-border)] py-2 text-sm text-[var(--color-text-muted)]">
                 No
               </button>
-              <button
-                onClick={confirmarEliminacion}
-                className="boton-tallado flex-1 rounded-xl bg-[var(--color-danger)] py-2 text-sm font-semibold text-white"
-              >
+              <button onClick={confirmarEliminacion} className="boton-tallado flex-1 rounded-xl bg-[var(--color-danger)] py-2 text-sm font-semibold text-white">
                 Sí, eliminar
               </button>
             </div>

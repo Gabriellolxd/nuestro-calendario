@@ -15,7 +15,6 @@ import { playSound } from '@/lib/soundManager';
 export default function PerfilMenu() {
   const [abierto, setAbierto] = useState(false);
   const [mostrarNotifModal, setMostrarNotifModal] = useState(false);
-  const [mostrarVincular, setMostrarVincular] = useState(false);
   const contenedorRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -64,13 +63,14 @@ export default function PerfilMenu() {
             Ciclo menstrual
           </Link>
 
-          <button
-            onClick={() => { setMostrarVincular(true); setAbierto(false); }}
-            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface)]"
+          <Link
+            href="/vincular"
+            onClick={() => setAbierto(false)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface)]"
           >
             <Link2 size={16} className="text-[var(--color-primary)]" />
             Compartir calendario
-          </button>
+          </Link>
 
           <button
             onClick={() => { setMostrarNotifModal(true); setAbierto(false); }}
@@ -94,7 +94,6 @@ export default function PerfilMenu() {
         </div>
       )}
       {mostrarNotifModal && <NotificacionesCalendariosModal onClose={() => setMostrarNotifModal(false)} />}
-      {mostrarVincular && <VincularModal onClose={() => setMostrarVincular(false)} />}
     </div>
   );
 }

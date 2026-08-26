@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Fraunces, Nunito, Caveat } from 'next/font/google';
 import { ThemeProvider } from '@/lib/ThemeContext';
+import { MusicProvider } from '@/lib/MusicContext';
 
 const fraunces = Fraunces({ subsets: ['latin'], variable: '--font-fraunces', display: 'swap' });
 const nunito = Nunito({ subsets: ['latin'], variable: '--font-nunito', display: 'swap' });
@@ -35,7 +36,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} ${fraunces.variable} ${nunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <MusicProvider>{children}</MusicProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

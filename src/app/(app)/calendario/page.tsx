@@ -402,6 +402,7 @@ export default function CalendarioPage() {
         <SelectorCalendario />
       </div>
 
+      <div className="overflow-hidden">
       <div
         className="px-2 pt-2"
         onTouchStart={manejarSwipeInicio}
@@ -470,6 +471,7 @@ export default function CalendarioPage() {
             />
           </div>
         )}
+      </div>
       </div>
 
       {!esEspectador && (
