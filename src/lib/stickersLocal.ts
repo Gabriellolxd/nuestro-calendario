@@ -13,63 +13,54 @@ function urlPublica(path: string): string {
   return data.publicUrl;
 }
 
-// Genera un string con forma de UUID v4 válida (para la columna `uuid` de
-// Postgres) de forma DETERMINISTA a partir de un texto — mismo texto
-// siempre da el mismo id, sin necesidad de guardar nada aparte. No es
-// criptográficamente aleatorio, pero no necesita serlo: solo necesita
-// sintaxis válida y ser estable entre sesiones/dispositivos.
-function idDeterministaUUID(seed: string): string {
-  let hash = 0;
-  const partes: string[] = [];
-  let texto = seed;
-  while (partes.join('').length < 32) {
-    hash = 0;
-    for (let i = 0; i < texto.length; i++) {
-      hash = (hash * 31 + texto.charCodeAt(i) + partes.length) | 0;
-    }
-    partes.push(Math.abs(hash).toString(16).padStart(8, '0'));
-    texto = texto + hash;
-  }
-  const hex = partes.join('').slice(0, 32);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-}
-
-// URL para mostrar un sticker: los predefinidos usan una ruta pública
-// directa (/stickers/algo.png desde /public), los subidos por el usuario
-// usan Supabase Storage, y los que aún no se subieron usan el blob local.
 export function urlParaSticker(asset: StickerAssetLocal): string {
-  if (asset.es_predefinido && asset.storage_path) return asset.storage_path;
   if (asset.storage_path) return urlPublica(asset.storage_path);
   if (asset.blob) return URL.createObjectURL(asset.blob);
   return '';
 }
 
-// Registra (una sola vez, de forma idempotente) los stickers predefinidos
-// como parte de la librería REAL del usuario — así viajan exactamente
-// por el mismo camino que cualquier sticker subido a mano: mismo id
-// estable, misma tabla, mismo mecanismo de sync. Se llama al abrir la app.
-export async function registrarStickersPredefinidos(userId: string) {
-  for (const predef of STICKERS_PREDEFINIDOS) {
-    const id = idDeterministaUUID(`${userId}-${predef.id}`);
-    const existente = await db.sticker_assets.get(id);
-    if (existente) continue;
+// Un sticker "para mostrar": puede venir del manifiesto estático
+// (predefinido, sin fila en la base de datos, igual para todos) o de la
+// tabla real (subido por alguien). Unificado para que el resto de la app
+// no necesite saber la diferencia al momento de dibujarlo.
+export type StickerVisual = {
+  id: string;
+  nombre: string;
+  url: string;
+  esPredefinido: boolean;
+  ownerUserId: string | null;
+};
 
-    await db.sticker_assets.put({
-      id,
-      owner_user_id: userId,
-      nombre: predef.nombre,
-      storage_path: predef.archivo,
-      es_predefinido: true,
-      blob: null,
-      client_updated_at: new Date().toISOString(),
-      deleted_at: null,
-      synced: 0,
-    });
-  }
-  subirStickersPendientes().catch((err) => console.error('Error registrando stickers predefinidos:', err));
+// Purga filas locales viejas de predefinidos (del sistema anterior, ya no
+// se usan) — self-healing: se llama al abrir el calendario, sin necesidad
+// de limpiar Dexie a mano en cada dispositivo.
+export async function limpiarStickersPredefinidosLocales() {
+  const todos = await db.sticker_assets.toArray();
+  const viejos = todos.filter((s) => s.es_predefinido);
+  if (viejos.length === 0) return;
+  await db.sticker_assets.bulkDelete(viejos.map((s) => s.id));
 }
 
-// ---------- CREAR (funciona offline: procesa el borde y guarda el blob localmente) ----------
+export async function obtenerStickersDisponibles(userIds: string[]): Promise<StickerVisual[]> {
+  const predefinidos: StickerVisual[] = STICKERS_PREDEFINIDOS.map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    url: p.archivo,
+    esPredefinido: true,
+    ownerUserId: null,
+  }));
+
+  const personalizados = await obtenerStickersLocal(userIds);
+  const personalizadosVisual: StickerVisual[] = personalizados.map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
+    url: urlParaSticker(s),
+    esPredefinido: false,
+    ownerUserId: s.owner_user_id,
+  }));
+
+  return [...predefinidos, ...personalizadosVisual];
+}
 
 export async function crearStickerLocal(userId: string, archivo: File, nombre: string): Promise<StickerAssetLocal> {
   const blobProcesado = await procesarStickerConBorde(archivo);
@@ -97,12 +88,8 @@ export async function eliminarStickerLocal(id: string) {
 
 export async function obtenerStickersLocal(userIds: string[]): Promise<StickerAssetLocal[]> {
   const todos = await db.sticker_assets.toArray();
-  return todos
-    .filter((s) => s.deleted_at === null && userIds.includes(s.owner_user_id))
-    .sort((a, b) => (a.es_predefinido === b.es_predefinido ? 0 : a.es_predefinido ? 1 : -1));
+  return todos.filter((s) => s.deleted_at === null && !s.es_predefinido && userIds.includes(s.owner_user_id));
 }
-
-// ---------- COLOCAR (placements) ----------
 
 export async function colocarStickerLocal(datos: {
   calendarioOwnerId: string;
@@ -169,16 +156,27 @@ export async function obtenerPlacementsLocal(calendarioOwnerId: string): Promise
   return todos.filter((p) => p.deleted_at === null);
 }
 
-// ---------- SYNC ----------
+export async function migrarPlacementADia(id: string, targetDia: string, posX: number, posY: number) {
+  await db.sticker_placements.update(id, {
+    target_type: 'dia',
+    target_dia: targetDia,
+    target_mes: null,
+    pos_x: posX,
+    pos_y: posY,
+    client_updated_at: new Date().toISOString(),
+    synced: 0,
+  });
+}
 
 export async function subirStickersPendientes() {
   if (estaOffline()) return;
 
   const assetsPendientes = await db.sticker_assets.where('synced').equals(0).toArray();
   for (const asset of assetsPendientes) {
+    if (asset.es_predefinido) continue; // nunca deberían existir, pero por seguridad no se suben
     try {
       if (asset.deleted_at) {
-        if (asset.storage_path && !asset.es_predefinido) {
+        if (asset.storage_path) {
           await supabase.storage.from('stickers').remove([asset.storage_path]);
         }
         await supabase.from('sticker_assets').delete().eq('id', asset.id);
@@ -201,7 +199,7 @@ export async function subirStickersPendientes() {
         owner_user_id: asset.owner_user_id,
         nombre: asset.nombre,
         storage_path: path,
-        es_predefinido: asset.es_predefinido,
+        es_predefinido: false,
       });
       if (upsertError) throw upsertError;
 
@@ -246,7 +244,11 @@ export async function descargarStickersDesdeNube(userIds: string[], calendarioOw
   if (estaOffline()) return;
 
   try {
-    const { data: assetsNube } = await supabase.from('sticker_assets').select('*').in('owner_user_id', userIds);
+    const { data: assetsNube } = await supabase
+      .from('sticker_assets')
+      .select('*')
+      .in('owner_user_id', userIds)
+      .eq('es_predefinido', false);
     if (assetsNube) {
       const idsNube = assetsNube.map((a) => a.id);
       const locales = await db.sticker_assets.where('id').anyOf(idsNube).toArray();
@@ -273,18 +275,4 @@ export async function descargarStickersDesdeNube(userIds: string[], calendarioOw
   } catch (err) {
     console.error('Error descargando stickers:', err);
   }
-}
-
-// Migración: convierte un sticker viejo (target_type 'mes') a uno
-// anclado a un día específico (cuadrante).
-export async function migrarPlacementADia(id: string, targetDia: string, posX: number, posY: number) {
-  await db.sticker_placements.update(id, {
-    target_type: 'dia',
-    target_dia: targetDia,
-    target_mes: null,
-    pos_x: posX,
-    pos_y: posY,
-    client_updated_at: new Date().toISOString(),
-    synced: 0,
-  });
 }

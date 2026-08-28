@@ -4,14 +4,14 @@
 import { useRef, useState, useEffect, useCallback, type MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, RotateCw, ArrowDownRight } from 'lucide-react';
-import type { StickerPlacementLocal, StickyNoteLocal, StickerAssetLocal } from '@/lib/db';
+import type { StickerPlacementLocal, StickyNoteLocal } from '@/lib/db';
+import type { StickerVisual } from '@/lib/stickersLocal';
 import { format } from '@/lib/dates';
 import {
   obtenerPlacementsLocal,
   colocarStickerLocal,
   actualizarTransformStickerLocal,
   quitarStickerLocal,
-  urlParaSticker,
   subirStickersPendientes,
   migrarPlacementADia,
 } from '@/lib/stickersLocal';
@@ -32,7 +32,7 @@ type Props = {
   dias: Date[];
   mesActual: Date;
   editable: boolean;
-  stickerAssets: StickerAssetLocal[];
+  stickerAssets: StickerVisual[];
   refreshTick: number;
   arrastreDesdeTray: { assetId: string; x: number; y: number } | null;
   onArrastreDesdeTrayTerminado: () => void;
@@ -221,7 +221,7 @@ export default function DecorationLayer({
     if (asset) {
       if (decoDragRef) decoDragRef.current = true;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- inicia el "fantasma" al arrastrar desde la bandeja externa
-      setFantasma({ url: urlParaSticker(asset), x: arrastreDesdeTray.x, y: arrastreDesdeTray.y });
+      setFantasma({ url: asset.url, x: arrastreDesdeTray.x, y: arrastreDesdeTray.y });
     }
   }, [arrastreDesdeTray, stickerAssets, decoDragRef]);
 
@@ -490,6 +490,10 @@ export default function DecorationLayer({
   // sobre el elemento pequeño; solo se activa si un dedo YA estaba
   // tocando un sticker/nota (gestoPendiente/arrastrando).
   useEffect(() => {
+    function midpoint(t1: Touch, t2: Touch) {
+      return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+    }
+
     function onTouchStartGlobal(e: TouchEvent) {
       if (!editable || e.touches.length !== 2) return;
       const activo = gestoPendiente.current || arrastrando.current;
@@ -499,12 +503,12 @@ export default function DecorationLayer({
       const { tipo, id } = activo;
       gestoPendiente.current = null;
       arrastrando.current = null;
-      setDragVisual(null);
 
       const item = tipo === 'sticker' ? placements.find((p) => p.id === id) : notas.find((n) => n.id === id);
       if (!item) return;
 
       const t1 = e.touches[0], t2 = e.touches[1];
+      const mid = midpoint(t1, t2);
       dosDedos.current = {
         tipo, id,
         distanciaInicial: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY),
@@ -512,6 +516,9 @@ export default function DecorationLayer({
         escalaInicial: tipo === 'sticker' ? (item as StickerPlacementLocal).escala : 1,
         rotacionInicial: item.rotacion,
       };
+      const { x, y } = posDesdeAbs(mid.x, mid.y);
+      setDragVisual({ id, xPct: x, yPct: y });
+      if (decoDragRef) decoDragRef.current = true;
       setSeleccionId(id);
       setModoInteraccion(tipo === 'sticker' ? 'escalando' : 'girando');
     }
@@ -524,6 +531,15 @@ export default function DecorationLayer({
       const nuevaDistancia = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
       const nuevoAngulo = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
       const nuevaRotacion = rotacionInicial + ((nuevoAngulo - anguloInicial) * 180) / Math.PI;
+
+      // Punto clave del fix: el sticker/nota sigue el PUNTO MEDIO entre
+      // los dos dedos en cada frame — antes solo se actualizaba
+      // escala/rotación y la posición quedaba "congelada" en el sitio
+      // donde empezó el pellizco.
+      const mid = midpoint(t1, t2);
+      const { x, y } = posDesdeAbs(mid.x, mid.y);
+      setDragVisual({ id, xPct: x, yPct: y });
+
       if (tipo === 'sticker') {
         const nuevaEscala = Math.min(3, Math.max(0.4, escalaInicial * (nuevaDistancia / distanciaInicial)));
         setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, escala: nuevaEscala, rotacion: nuevaRotacion } : p)));
@@ -539,12 +555,31 @@ export default function DecorationLayer({
       setModoInteraccion('ninguno');
       if (decoDragRef) decoDragRef.current = false;
       playSound('pegar');
+
+      const posicionFinal = dragVisual;
+      setDragVisual(null);
+      const destino = posicionFinal ? diaYCeldaDesdeAbsoluta(dias, posicionFinal.xPct, posicionFinal.yPct) : null;
+
       if (tipo === 'sticker') {
         const p = placements.find((pl) => pl.id === id);
-        if (p) { await actualizarTransformStickerLocal(id, { escala: p.escala, rotacion: p.rotacion }); subirStickersPendientes().catch(() => {}); }
+        if (p) {
+          if (destino) {
+            await migrarPlacementADia(id, destino.fechaISO, destino.posXCelda, destino.posYCelda);
+            setPlacements((prev) => prev.map((pl) => (pl.id === id ? { ...pl, target_dia: destino.fechaISO, pos_x: destino.posXCelda, pos_y: destino.posYCelda } : pl)));
+          }
+          await actualizarTransformStickerLocal(id, { escala: p.escala, rotacion: p.rotacion });
+          subirStickersPendientes().catch(() => {});
+        }
       } else {
         const n = notas.find((nn) => nn.id === id);
-        if (n) { await actualizarNotaLocal(id, { rotacion: n.rotacion }); subirNotasPendientes().catch(() => {}); }
+        if (n) {
+          if (destino) {
+            await migrarNotaADia(id, destino.fechaISO, destino.posXCelda, destino.posYCelda);
+            setNotas((prev) => prev.map((nn) => (nn.id === id ? { ...nn, target_dia: destino.fechaISO, pos_x: destino.posXCelda, pos_y: destino.posYCelda } : nn)));
+          }
+          await actualizarNotaLocal(id, { rotacion: n.rotacion });
+          subirNotasPendientes().catch(() => {});
+        }
       }
     }
 
@@ -624,7 +659,7 @@ export default function DecorationLayer({
                 onClick={(e) => e.stopPropagation()}
               >
                 <img
-                  src={urlParaSticker(asset)}
+                  src={asset.url}
                   alt={asset.nombre}
                   style={{ width: anchoSticker }}
                   className="select-none drop-shadow-md"

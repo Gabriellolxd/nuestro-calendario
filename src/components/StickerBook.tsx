@@ -4,15 +4,14 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, Upload, X, Trash2, AlertTriangle } from 'lucide-react';
-import type { StickerAssetLocal } from '@/lib/db';
-import { urlParaSticker, eliminarStickerLocal, subirStickersPendientes } from '@/lib/stickersLocal';
-import { STICKERS_PREDEFINIDOS } from '@/lib/stickersPredefinidos';
+import type { StickerVisual } from '@/lib/stickersLocal';
+import { eliminarStickerLocal, subirStickersPendientes } from '@/lib/stickersLocal';
 import { playSound } from '@/lib/soundManager';
 
 const POR_LADO = 6;
 
 type Props = {
-  stickers: StickerAssetLocal[];
+  stickers: StickerVisual[];
   userId: string;
   oculto: boolean;
   onAbrirLibreria: () => void;
@@ -32,7 +31,7 @@ export default function StickerBook({
   const [spread, setSpread] = useState(0);
   const [modoEliminar, setModoEliminar] = useState(false);
   const [avisoNoPermitido, setAvisoNoPermitido] = useState(false);
-  const [confirmar, setConfirmar] = useState<StickerAssetLocal | null>(null);
+  const [confirmar, setConfirmar] = useState<StickerVisual | null>(null);
   const [montado, setMontado] = useState(false);
 
   useState(() => setMontado(true));
@@ -60,9 +59,8 @@ export default function StickerBook({
     setSpread((s) => Math.min(totalSpreads - 1, Math.max(0, s + dir)));
   }
 
-  function handleClickStickerEnModoEliminar(sticker: StickerAssetLocal) {
-    const sigueEnManifiesto = sticker.es_predefinido && STICKERS_PREDEFINIDOS.some((p) => p.archivo === sticker.storage_path);
-    if (sticker.owner_user_id !== userId || sigueEnManifiesto) {
+  function handleClickStickerEnModoEliminar(sticker: StickerVisual) {
+    if (sticker.esPredefinido || sticker.ownerUserId !== userId) {
       setAvisoNoPermitido(true);
       setTimeout(() => setAvisoNoPermitido(false), 2200);
       return;
@@ -79,7 +77,7 @@ export default function StickerBook({
     onStickerEliminado();
   }
 
-  function celda(sticker: StickerAssetLocal | undefined, key: string) {
+  function celda(sticker: StickerVisual | undefined, key: string) {
     if (!sticker) return <div key={key} className="aspect-square rounded-lg bg-black/5" />;
 
     if (modoEliminar) {
@@ -90,7 +88,7 @@ export default function StickerBook({
           className="group relative aspect-square w-full rounded-lg bg-[#f4e9d4] p-1.5 transition-transform active:scale-95"
         >
           <img
-            src={urlParaSticker(sticker)}
+            src={sticker.url}
             alt={sticker.nombre}
             className="h-full w-full object-contain transition-opacity group-hover:opacity-20"
             draggable={false}
@@ -105,7 +103,7 @@ export default function StickerBook({
     return (
       <img
         key={sticker.id}
-        src={urlParaSticker(sticker)}
+        src={sticker.url}
         alt={sticker.nombre}
         draggable={false}
         onPointerDown={(e) => {
@@ -205,7 +203,7 @@ export default function StickerBook({
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--color-wood-dark)]/60 px-4" onClick={() => setConfirmar(null)}>
           <div className="panel-madera w-full max-w-xs animar-entrada p-5 text-center" onClick={(e) => e.stopPropagation()}>
             <AlertTriangle size={28} className="mx-auto mb-2 text-[var(--color-danger)]" />
-            <img src={urlParaSticker(confirmar)} alt="" className="mx-auto mb-2 h-14 w-14 object-contain" />
+            <img src={confirmar.url} alt="" className="mx-auto mb-2 h-14 w-14 object-contain" />
             <p className="mb-4 text-sm font-semibold text-[var(--color-text)]">¿Enserio deseas eliminarlo?</p>
             <div className="flex gap-2">
               <button onClick={() => setConfirmar(null)} className="flex-1 rounded-xl border-2 border-[var(--color-border)] py-2 text-sm text-[var(--color-text-muted)]">

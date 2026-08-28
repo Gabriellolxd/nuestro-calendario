@@ -36,13 +36,13 @@ import type { CycleLogLocal, CyclePredictionCacheLocal } from '@/lib/db';
 import { solicitarPermisoNotificaciones, reprogramarNotificacionesDeUsuario } from '@/lib/notifications';import SyncStatusButton from '@/components/SyncStatusButton';
 import DecorationLayer from '@/components/DecorationLayer';
 import StickerLibraryModal from '@/components/StickerLibraryModal';
-import { obtenerStickersLocal, colocarStickerLocal, subirStickersPendientes, descargarStickersDesdeNube } from '@/lib/stickersLocal';
+import { obtenerStickersDisponibles, limpiarStickersPredefinidosLocales, colocarStickerLocal, subirStickersPendientes, descargarStickersDesdeNube } from '@/lib/stickersLocal';
+import type { StickerVisual } from '@/lib/stickersLocal';
 import { crearNotaLocal, subirNotasPendientes, descargarNotasDesdeNube } from '@/lib/notesLocal';
 import type { StickerAssetLocal } from '@/lib/db';
 import StickerBook from '@/components/StickerBook';
 import NotesStack from '@/components/NotesStack';
 import MusicButton from '@/components/MusicButton';
-import { registrarStickersPredefinidos } from '@/lib/stickersLocal';
 import { playSound } from '@/lib/soundManager';
 import PantallaCarga from '@/components/PantallaCarga';
 import BannerSinConexion from '@/components/BannerSinConexion';
@@ -88,7 +88,7 @@ export default function CalendarioPage() {
 
   const [modoDecorar, setModoDecorar] = useState(false);
   const [mostrarLibreriaStickers, setMostrarLibreriaStickers] = useState(false);
-  const [stickerAssets, setStickerAssets] = useState<StickerAssetLocal[]>([]);
+  const [stickerAssets, setStickerAssets] = useState<StickerVisual[]>([]);
   const [decoTick, setDecoTick] = useState(0);
 
   const diasMes = getMonthGrid(fechaAncla);
@@ -170,12 +170,23 @@ export default function CalendarioPage() {
 
   useEffect(() => {
     if (!ownerId || !userId) return;
-    const ids = [userId, ownerId].filter((v, i, arr) => arr.indexOf(v) === i);
-    registrarStickersPredefinidos(userId).then(() => {
-      obtenerStickersLocal(ids).then(setStickerAssets);
-    });
-    descargarStickersDesdeNube(ids, ownerId);
-    descargarNotasDesdeNube(ownerId);
+    const ownerIdSeguro = ownerId;
+    const ids = [userId, ownerIdSeguro].filter((v, i, arr) => arr.indexOf(v) === i);
+    let cancelado = false;
+
+    async function sincronizarStickersYNotas() {
+      await limpiarStickersPredefinidosLocales();
+      // Espera a que la descarga TERMINE antes de leer — antes se leía
+      // de inmediato, sin esperar, por eso nunca veías a tiempo los
+      // stickers personalizados de tu pareja.
+      await descargarStickersDesdeNube(ids, ownerIdSeguro);
+      await descargarNotasDesdeNube(ownerIdSeguro);
+      if (cancelado) return;
+      setStickerAssets(await obtenerStickersDisponibles(ids));
+    }
+
+    sincronizarStickersYNotas();
+    return () => { cancelado = true; };
   }, [userId, ownerId, syncTick]);
 
   useEffect(() => {
@@ -494,7 +505,7 @@ export default function CalendarioPage() {
             onStickerEliminado={async () => {
               if (!userId || !ownerId) return;
               const ids = [userId, ownerId].filter((v, i, arr) => arr.indexOf(v) === i);
-              setStickerAssets(await obtenerStickersLocal(ids));
+              setStickerAssets(await obtenerStickersDisponibles(ids));
             }}
           />
           <NotesStack
