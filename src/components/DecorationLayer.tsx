@@ -57,7 +57,7 @@ const COLUMNAS = 7;
 // ============================================================
 const ESCALA_STICKER_WEB = 1.0;
 const ESCALA_NOTA_WEB = 0.9;
-const MULTIPLICADOR_MOVIL = 0.9;
+const MULTIPLICADOR_MOVIL = 1.9;
 
 type ModoInteraccion = 'ninguno' | 'arrastrando' | 'girando' | 'escalando';
 
