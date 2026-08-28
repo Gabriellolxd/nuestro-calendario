@@ -56,8 +56,15 @@ const COLUMNAS = 7;
 //   dispositivos táctiles. 0.5 = la mitad que en web.
 // ============================================================
 const ESCALA_STICKER_WEB = 1.0;
-const ESCALA_NOTA_WEB = 0.9;
-const MULTIPLICADOR_MOVIL = 1.9;
+const ESCALA_NOTA_WEB = 0.8;
+const MULTIPLICADOR_MOVIL = 2;
+
+// ============================================================
+// CONFIGURACIÓN DE FÍSICA DEL PÉNDULO / BALANCEO
+// ============================================================
+const SENSIBILIDAD_PENDULO = 0.015;  // Sensibilidad suavizada
+const AMORTIGUACION_PENDULO = 0.94; // Balanceo más pausado que tarda un poco más en frenar
+const RIGIDEZ_PENDULO = 0.05;       // Menor rigidez para un movimiento más lento estilo péndulo pesado
 
 type ModoInteraccion = 'ninguno' | 'arrastrando' | 'girando' | 'escalando';
 
@@ -151,6 +158,14 @@ export default function DecorationLayer({
   const gestoPendiente = useRef<{ tipo: 'sticker' | 'nota'; id: string; startX: number; startY: number } | null>(null);
   const arrastrando = useRef<{ tipo: 'sticker' | 'nota'; id: string } | null>(null);
   const girando = useRef<{ tipo: 'sticker' | 'nota'; id: string; centroX: number; centroY: number } | null>(null);
+
+  // Control de inercia y física del balanceo
+  const [anguloBalanceo, setAnguloBalanceo] = useState(0);
+  const [pivoteRelativo, setPivoteRelativo] = useState<{ xPct: number; yPct: number }>({ xPct: 50, yPct: 50 });
+  const posAnterior = useRef<{ x: number; y: number; tiempo: number } | null>(null);
+  const velocidadAngular = useRef(0);
+  const anguloActualRef = useRef(0);
+  const animFrameId = useRef<number | null>(null);
   const escalando = useRef<{ id: string; centroX: number; centroY: number; distanciaInicial: number; escalaInicial: number } | null>(null);
   const dosDedos = useRef<{
     tipo: 'sticker' | 'nota'; id: string;
@@ -246,6 +261,15 @@ export default function DecorationLayer({
     if (!editable) return;
     if (decoDragRef) decoDragRef.current = true;
     e.stopPropagation();
+
+    // Calcula dónde se hizo clic dentro del elemento (en porcentaje 0% - 100%)
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      const xPct = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
+      const yPct = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100));
+      setPivoteRelativo({ xPct, yPct });
+    }
+
     gestoPendiente.current = { tipo, id, startX: e.clientX, startY: e.clientY };
   }
 
@@ -269,6 +293,32 @@ export default function DecorationLayer({
     escalando.current = { id, centroX: x, centroY: y, distanciaInicial, escalaInicial: p.escala };
     setModoInteraccion('escalando');
   }
+
+  // Bucle de física ejecutado a 60/120fps nativos para soltar con inercia de péndulo
+  const iniciarAnimacionFisica = useCallback(() => {
+    if (animFrameId.current !== null) return;
+
+    const loopFisica = () => {
+      // Fuerza del resorte que empuja hacia 0°
+      const fuerzaResorte = -RIGIDEZ_PENDULO * anguloActualRef.current;
+      // Aplicar aceleración y fricción
+      velocidadAngular.current = (velocidadAngular.current + fuerzaResorte) * AMORTIGUACION_PENDULO;
+      anguloActualRef.current += velocidadAngular.current;
+
+      setAnguloBalanceo(anguloActualRef.current);
+
+      // Si aún se está moviendo con fuerza o está inclinado, continuar el loop
+      if (Math.abs(velocidadAngular.current) > 0.01 || Math.abs(anguloActualRef.current) > 0.01) {
+        animFrameId.current = requestAnimationFrame(loopFisica);
+      } else {
+        animFrameId.current = null;
+        anguloActualRef.current = 0;
+        setAnguloBalanceo(0);
+      }
+    };
+
+    animFrameId.current = requestAnimationFrame(loopFisica);
+  }, []);
 
   function mover(clientX: number, clientY: number) {
     if (fantasma) {
@@ -295,9 +345,27 @@ export default function DecorationLayer({
       if (Math.hypot(clientX - startX, clientY - startY) < UMBRAL_CLICK_PX) return;
       arrastrando.current = { tipo: gestoPendiente.current.tipo, id: gestoPendiente.current.id };
       setModoInteraccion('arrastrando');
+      // eslint-disable-next-line react-hooks/purity
+      posAnterior.current = { x: clientX, y: clientY, tiempo: performance.now() };
       playSound(gestoPendiente.current.tipo === 'nota' ? 'agarrar_nota' : 'agarrar');
     }
     if (!arrastrando.current) return;
+
+    // Cálculo de velocidad del cursor/dedo para la inclinación opuesta (efecto péndulo)
+    // eslint-disable-next-line react-hooks/purity
+    const ahora = performance.now();
+    if (posAnterior.current) {
+      const dt = Math.max(1, ahora - posAnterior.current.tiempo);
+      const dx = clientX - posAnterior.current.x;
+      const velX = dx / dt; // velocidad en px/ms
+
+      // Al mover a la derecha (+dx), la pieza se inclina hacia la derecha (+ángulo)
+      const impulso = velX * SENSIBILIDAD_PENDULO * 15;
+      velocidadAngular.current += impulso;
+      iniciarAnimacionFisica();
+    }
+    posAnterior.current = { x: clientX, y: clientY, tiempo: ahora };
+
     const { x, y } = posDesdeAbs(clientX, clientY);
     setDragVisual({ id: arrastrando.current.id, xPct: x, yPct: y });
     setSobreBasurero(estaSobreBasurero(clientX, clientY));
@@ -305,6 +373,8 @@ export default function DecorationLayer({
 
   async function soltar(clientX: number, clientY: number) {
     try {
+      posAnterior.current = null;
+
       if (fantasma) {
         const cancelado = sobreBasurero;
         const asset = stickerAssets.find((a) => a.id === arrastreDesdeTray?.assetId);
@@ -533,8 +603,7 @@ export default function DecorationLayer({
             ? { leftPct: dragVisual!.xPct, topPct: dragVisual!.yPct }
             : posicionAbsoluta(dias, p.target_dia, p.pos_x, p.pos_y);
           if (!abs) return null;
-          // eslint-disable-next-line react-hooks/purity
-          const wobble = arrastrandoEste ? Math.sin(Date.now() / 70) * 5 : 0;
+          const anguloTotal = arrastrandoEste ? p.rotacion + anguloBalanceo : p.rotacion;
 
           return (
             <div
@@ -546,7 +615,8 @@ export default function DecorationLayer({
                 data-deco-item
                 className="pointer-events-auto relative animate-[stickerPop_0.25s_ease-out]"
                 style={{
-                  transform: `translate(-50%, -50%) rotate(${p.rotacion + wobble}deg) scale(${arrastrandoEste || seleccionado ? p.escala * 1.1 : p.escala})`,
+                  transform: `translate(-50%, -50%) rotate(${anguloTotal}deg) scale(${arrastrandoEste || seleccionado ? p.escala * 1.1 : p.escala})`,
+                  transformOrigin: arrastrandoEste ? `${pivoteRelativo.xPct}% ${pivoteRelativo.yPct}%` : 'center center',
                   touchAction: 'none',
                   transition: modoInteraccion === 'ninguno' && !arrastrandoEste ? 'transform 0.15s ease-out' : 'none',
                 }}
@@ -592,8 +662,7 @@ export default function DecorationLayer({
             ? { leftPct: dragVisual!.xPct, topPct: dragVisual!.yPct }
             : posicionAbsoluta(dias, n.target_dia, n.pos_x, n.pos_y);
           if (!abs) return null;
-          // eslint-disable-next-line react-hooks/purity
-          const wobble = arrastrandoEste ? Math.sin(Date.now() / 70) * 5 : 0;
+          const anguloTotal = arrastrandoEste ? n.rotacion + anguloBalanceo : n.rotacion;
 
           return (
             <div
@@ -605,7 +674,8 @@ export default function DecorationLayer({
                 data-deco-item
                 className="pointer-events-auto relative animate-[stickerPop_0.25s_ease-out]"
                 style={{
-                  transform: `translate(-50%, -50%) rotate(${n.rotacion + wobble}deg) scale(${arrastrandoEste || seleccionada ? 1.08 : 1})`,
+                  transform: `translate(-50%, -50%) rotate(${anguloTotal}deg) scale(${arrastrandoEste || seleccionada ? 1.08 : 1})`,
+                  transformOrigin: arrastrandoEste ? `${pivoteRelativo.xPct}% ${pivoteRelativo.yPct}%` : 'center center',
                   touchAction: 'none',
                   transition: modoInteraccion === 'ninguno' && !arrastrandoEste ? 'transform 0.15s ease-out' : 'none',
                 }}
