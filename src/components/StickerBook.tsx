@@ -134,8 +134,8 @@ export default function StickerBook({
           className="textura-cuero relative flex h-10 w-32 items-center justify-center gap-1.5 rounded-t-2xl border-2 border-b-0 border-[var(--color-wood-dark)] shadow-[0_-3px_10px_rgba(0,0,0,0.25)]"
           style={{ backgroundColor: 'var(--color-leather)' }}
         >
-          <BookOpen size={14} className="text-[var(--color-gold-soft)]" />
-          <span className="font-display text-xs font-bold tracking-wide text-[var(--color-gold-soft)]">Mis Stickers</span>
+          <BookOpen size={14} className="text-[#f2dfae]" />
+          <span className="font-display text-xs font-bold tracking-wide text-[#f2dfae]">Mis Stickers</span>
         </button>
 
         <div
@@ -146,21 +146,21 @@ export default function StickerBook({
             <button
               onClick={toggleModoEliminar}
               className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
-                modoEliminar ? 'bg-[var(--color-danger)] text-white' : 'bg-black/15 text-[var(--color-gold-soft)]'
+                modoEliminar ? 'bg-[var(--color-danger)] text-white' : 'bg-black/15 text-[#f2dfae]'
               }`}
               aria-label="Eliminar stickers"
               title="Eliminar stickers de tu librería"
             >
               <Trash2 size={13} />
             </button>
-            <span className="font-display text-[11px] text-[var(--color-gold-soft)]/80">pág. {spread + 1}/{totalSpreads}</span>
-            <button onClick={onAbrirLibreria} className="flex items-center gap-1 rounded-full bg-black/15 px-2.5 py-1 text-[10px] font-medium text-[var(--color-gold-soft)]">
+            <span className="font-display text-[11px] text-[#f2dfae]/80">pág. {spread + 1}/{totalSpreads}</span>
+            <button onClick={onAbrirLibreria} className="flex items-center gap-1 rounded-full bg-black/15 px-2.5 py-1 text-[10px] font-medium text-[#f2dfae]">
               <Upload size={11} /> Subir
             </button>
           </div>
 
           {modoEliminar && (
-            <p className="animar-entrada mx-3 mt-2 rounded-lg bg-black/20 px-2.5 py-1.5 text-center text-[10px] font-medium text-[var(--color-gold-soft)]">
+            <p className="animar-entrada mx-3 mt-2 rounded-lg bg-black/20 px-2.5 py-1.5 text-center text-[10px] font-medium text-[#f2dfae]">
               {avisoNoPermitido
                 ? 'No puedes eliminar este sticker (no es tuyo o es predefinido)'
                 : 'Selecciona un sticker para eliminarlo de tu libreta'}
@@ -194,7 +194,7 @@ export default function StickerBook({
           </div>
 
           <div className="flex justify-center pb-2">
-            <button onClick={toggleAbierto} className="rounded-full bg-black/15 p-1.5 text-[var(--color-gold-soft)]">
+            <button onClick={toggleAbierto} className="rounded-full bg-black/15 p-1.5 text-[#f2dfae]">
               <X size={13} />
             </button>
           </div>

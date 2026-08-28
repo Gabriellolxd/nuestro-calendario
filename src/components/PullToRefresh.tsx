@@ -16,6 +16,8 @@ export default function PullToRefresh() {
   useEffect(() => {
     function onTouchStart(e: TouchEvent) {
       if (window.scrollY > 4) return;
+      const target = e.target as HTMLElement | null;
+      if (!target || !target.closest('[data-ptr-zone]')) return;
       inicioY.current = e.touches[0].clientY;
       activo.current = true;
     }

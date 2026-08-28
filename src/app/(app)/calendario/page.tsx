@@ -330,9 +330,9 @@ export default function CalendarioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] pb-24 textura-cozy">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[var(--color-bg)] textura-cozy">
       <BannerSinConexion />
-      <div className="sticky top-0 z-40 border-b-[3px] border-[var(--color-wood-dark)] bg-[var(--color-bg-elevated)]">
+      <div data-ptr-zone className="sticky top-0 z-40 flex-shrink-0 border-b-[3px] border-[var(--color-wood-dark)] bg-[var(--color-bg-elevated)]">
         <div className="relative flex items-center justify-between px-2 py-2 sm:px-4">
           <MusicButton />
 
@@ -402,9 +402,9 @@ export default function CalendarioPage() {
         <SelectorCalendario />
       </div>
 
-      <div className="overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
       <div
-        className="px-2 pt-2"
+        className={`h-full px-2 pt-2 ${vista === 'mes' ? 'overflow-hidden' : 'overflow-y-auto pb-24'}`}
         onTouchStart={manejarSwipeInicio}
         onTouchMove={manejarSwipeMove}
         onTouchEnd={manejarSwipeFin}
@@ -414,8 +414,8 @@ export default function CalendarioPage() {
         }}
       >
         {vista === 'mes' && ownerId && (
-          <div className="relative">
-            <div className="panel-madera overflow-hidden">
+          <div className="relative h-full">
+            <div className="panel-madera h-full overflow-hidden">
               <VistaMes
                 dias={diasMes}
                 mesActual={fechaAncla}
@@ -593,9 +593,11 @@ function VistaMes({
       .sort((a, b) => a.hora_inicio.getTime() - b.hora_inicio.getTime());
   }
 
+  const filas = Math.max(1, Math.ceil(dias.length / 7));
+
   return (
-    <>
-      <div className="grid grid-cols-7 border-b-2 border-[var(--color-border)] bg-[var(--color-surface)] text-center text-[11px] font-bold uppercase tracking-wide text-[var(--color-wood-dark)]">
+    <div className="flex h-full flex-col">
+      <div className="grid flex-shrink-0 grid-cols-7 border-b-2 border-[var(--color-border)] bg-[var(--color-surface)] text-center text-[11px] font-bold uppercase tracking-wide text-[var(--color-wood-dark)]">
         {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d) => (
           <div key={d} className="py-2">
             {d}
@@ -603,7 +605,7 @@ function VistaMes({
         ))}
       </div>
 
-      <div className="grid grid-cols-7">
+      <div className="grid flex-1 grid-cols-7" style={{ gridTemplateRows: `repeat(${filas}, minmax(0, 1fr))` }}>
         {dias.map((dia, i) => {
           const ocDia = ocurrenciasDelDia(dia);
           const hayOverflow = ocDia.length > MAX_CHIPS_MES;
@@ -620,7 +622,7 @@ function VistaMes({
             <div
               key={dia.toISOString()}
               onClick={() => onCrear(dia)}
-              className={`relative flex min-h-[68px] sm:min-h-[100px] cursor-pointer flex-col border-b border-r border-[var(--color-border)]/60 p-1 sm:p-1.5 transition-colors ${
+              className={`relative flex h-full min-h-0 cursor-pointer flex-col overflow-hidden border-b border-r border-[var(--color-border)]/60 p-1 sm:p-1.5 transition-colors ${
                 dentroDelMes ? 'bg-[var(--color-bg-elevated)]' : 'bg-[var(--color-surface)]/40 opacity-50'
               } ${esSeleccionado && !esHoy ? 'bg-[var(--color-primary-soft)]' : ''} ${(i + 1) % 7 === 0 ? 'border-r-0' : ''}`}
             >
@@ -683,6 +685,6 @@ function VistaMes({
           );
         })}
       </div>
-    </>
+    </div>
   );
 }

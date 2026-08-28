@@ -3,7 +3,7 @@
 
 import { useRef, useState, useEffect, useCallback, type MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2 } from 'lucide-react';
+import { Trash2, RotateCw, ArrowDownRight } from 'lucide-react';
 import type { StickerPlacementLocal, StickyNoteLocal, StickerAssetLocal } from '@/lib/db';
 import { format } from '@/lib/dates';
 import {
@@ -43,6 +43,21 @@ type Props = {
 const RADIO_BASURERO = 50;
 const UMBRAL_CLICK_PX = 6;
 const COLUMNAS = 7;
+
+// ============================================================
+// AJUSTE MANUAL DE TAMAÑO — stickers y notas
+// Todo el tamaño sale de multiplicar el ancho real de una celda
+// del calendario (cellWidthPx, medido con ResizeObserver) por
+// estos números. Cambia estos valores a tu gusto:
+//
+// - ESCALA_STICKER_WEB / ESCALA_NOTA_WEB: tamaño base (proporción
+//   del ancho de una celda) en pantallas con mouse/web.
+// - MULTIPLICADOR_MOVIL: qué porcentaje de ese tamaño se aplica en
+//   dispositivos táctiles. 0.5 = la mitad que en web.
+// ============================================================
+const ESCALA_STICKER_WEB = 0.62;
+const ESCALA_NOTA_WEB = 1.15;
+const MULTIPLICADOR_MOVIL = 0.5;
 
 type ModoInteraccion = 'ninguno' | 'arrastrando' | 'girando' | 'escalando';
 
@@ -107,6 +122,7 @@ export default function DecorationLayer({
   // para que el tamaño del sticker/nota escale proporcional al cuadrante,
   // igual en cualquier pantalla.
   const [cellWidthPx, setCellWidthPx] = useState(56);
+  const [esMovil, setEsMovil] = useState(false);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMontado(true), []);
@@ -119,6 +135,17 @@ export default function DecorationLayer({
     });
     obs.observe(contenedorRef.current);
     return () => obs.disconnect();
+  }, []);
+
+  // Detecta táctil (móvil) vs mouse (web) para aplicar MULTIPLICADOR_MOVIL.
+  // pointer:coarse = dedo, pointer:fine = mouse.
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEsMovil(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setEsMovil(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, []);
 
   const gestoPendiente = useRef<{ tipo: 'sticker' | 'nota'; id: string; startX: number; startY: number } | null>(null);
@@ -486,8 +513,9 @@ export default function DecorationLayer({
   }
 
   const mostrarBasurero = editable && (modoInteraccion === 'arrastrando' || !!fantasma);
-  const anchoSticker = Math.round(cellWidthPx * 0.62);
-  const anchoNota = Math.round(cellWidthPx * 1.15);
+  const factorDispositivo = esMovil ? MULTIPLICADOR_MOVIL : 1;
+  const anchoSticker = Math.round(cellWidthPx * ESCALA_STICKER_WEB * factorDispositivo);
+  const anchoNota = Math.round(cellWidthPx * ESCALA_NOTA_WEB * factorDispositivo);
 
   return (
     <>
@@ -533,31 +561,26 @@ export default function DecorationLayer({
                   draggable={false}
                 />
                 {editable && seleccionado && !arrastrandoEste && (
-                  <div
-                    onPointerDown={(e) => { e.stopPropagation(); iniciarEscala(p.id, e.clientX, e.clientY); }}
-                    className="absolute -bottom-1 -right-1 flex h-5 w-5 cursor-nwse-resize items-center justify-center rounded-full bg-white text-[10px] shadow"
-                    title="Arrastra para agrandar o achicar"
-                  >
-                    ↘
-                  </div>
+                  <>
+                    <div
+                      onPointerDown={(e) => { e.stopPropagation(); iniciarEscala(p.id, e.clientX, e.clientY); }}
+                      className="absolute -bottom-1.5 -right-1.5 hidden h-6 w-6 cursor-nwse-resize items-center justify-center rounded-full border-2 border-[var(--color-bg-elevated)] bg-[var(--color-primary)] text-[var(--color-text-inverse)] shadow-[var(--sombra-panel-suave)] transition-transform hover:scale-110 sm:flex"
+                      style={{ transform: `scale(${1 / (p.escala * 1.1)})` }}
+                      title="Arrastra para agrandar o achicar"
+                    >
+                      <ArrowDownRight size={12} strokeWidth={2.75} />
+                    </div>
+                    <div
+                      onPointerDown={(e) => { e.stopPropagation(); iniciarGiro('sticker', p.id); }}
+                      className="absolute -top-1.5 -left-1.5 hidden h-6 w-6 cursor-grab items-center justify-center rounded-full border-2 border-[var(--color-bg-elevated)] bg-[var(--color-wood)] text-[var(--color-text-inverse)] shadow-[var(--sombra-panel-suave)] transition-transform hover:scale-110 active:cursor-grabbing sm:flex"
+                      style={{ transform: `scale(${1 / (p.escala * 1.1)})` }}
+                      title="Arrastra para girar"
+                    >
+                      <RotateCw size={12} strokeWidth={2.75} />
+                    </div>
+                  </>
                 )}
               </div>
-
-              {editable && seleccionado && !arrastrandoEste && (
-                <div
-                  data-deco-item
-                  className="pointer-events-auto absolute left-1/2 top-9 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white px-2 py-1 shadow-lg"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onPointerDown={(e) => { e.stopPropagation(); iniciarGiro('sticker', p.id); }}
-                    className="cursor-grab select-none text-xs active:cursor-grabbing"
-                    title="Arrastra para girar"
-                  >
-                    🔄
-                  </button>
-                </div>
-              )}
             </div>
           );
         })}
