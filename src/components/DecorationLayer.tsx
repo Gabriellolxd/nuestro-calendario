@@ -3,7 +3,7 @@
 
 import { useRef, useState, useEffect, useCallback, type MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2, RotateCw, ArrowDownRight } from 'lucide-react';
+import { Trash2, RotateCw, ArrowDownRight, Loader2 } from 'lucide-react';
 import type { StickerPlacementLocal, StickyNoteLocal } from '@/lib/db';
 import type { StickerVisual } from '@/lib/stickersLocal';
 import { format } from '@/lib/dates';
@@ -44,27 +44,13 @@ const RADIO_BASURERO = 50;
 const UMBRAL_CLICK_PX = 6;
 const COLUMNAS = 7;
 
-// ============================================================
-// AJUSTE MANUAL DE TAMAÑO — stickers y notas
-// Todo el tamaño sale de multiplicar el ancho real de una celda
-// del calendario (cellWidthPx, medido con ResizeObserver) por
-// estos números. Cambia estos valores a tu gusto:
-//
-// - ESCALA_STICKER_WEB / ESCALA_NOTA_WEB: tamaño base (proporción
-//   del ancho de una celda) en pantallas con mouse/web.
-// - MULTIPLICADOR_MOVIL: qué porcentaje de ese tamaño se aplica en
-//   dispositivos táctiles. 0.5 = la mitad que en web.
-// ============================================================
 const ESCALA_STICKER_WEB = 1.0;
 const ESCALA_NOTA_WEB = 0.8;
 const MULTIPLICADOR_MOVIL = 2;
 
-// ============================================================
-// CONFIGURACIÓN DE FÍSICA DEL PÉNDULO / BALANCEO
-// ============================================================
-const SENSIBILIDAD_PENDULO = 0.015;  // Sensibilidad suavizada
-const AMORTIGUACION_PENDULO = 0.94; // Balanceo más pausado que tarda un poco más en frenar
-const RIGIDEZ_PENDULO = 0.05;       // Menor rigidez para un movimiento más lento estilo péndulo pesado
+const SENSIBILIDAD_PENDULO = 0.015;
+const AMORTIGUACION_PENDULO = 0.94;
+const RIGIDEZ_PENDULO = 0.05;
 
 type ModoInteraccion = 'ninguno' | 'arrastrando' | 'girando' | 'escalando';
 
@@ -125,11 +111,12 @@ export default function DecorationLayer({
   const [modoInteraccion, setModoInteraccion] = useState<ModoInteraccion>('ninguno');
   const [montado, setMontado] = useState(false);
   const [dragVisual, setDragVisual] = useState<{ id: string; xPct: number; yPct: number } | null>(null);
-  // Ancho real de UNA celda del calendario (medido, no fijo) — la base
-  // para que el tamaño del sticker/nota escale proporcional al cuadrante,
-  // igual en cualquier pantalla.
   const [cellWidthPx, setCellWidthPx] = useState(56);
   const [esMovil, setEsMovil] = useState(false);
+  // Ids de stickers cuya imagen ya terminó de cargar — hasta que esto
+  // pase, se muestra un spinner en vez del sticker, y el "pop" de
+  // aparición solo se dispara una vez que la imagen está lista de verdad.
+  const [imgsCargados, setImgsCargados] = useState<Set<string>>(new Set());
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMontado(true), []);
@@ -144,8 +131,6 @@ export default function DecorationLayer({
     return () => obs.disconnect();
   }, []);
 
-  // Detecta táctil (móvil) vs mouse (web) para aplicar MULTIPLICADOR_MOVIL.
-  // pointer:coarse = dedo, pointer:fine = mouse.
   useEffect(() => {
     const mq = window.matchMedia('(pointer: coarse)');
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -155,11 +140,25 @@ export default function DecorationLayer({
     return () => mq.removeEventListener('change', handler);
   }, []);
 
+  // Bloquea la selección de texto de la página mientras se está girando
+  // o escalando un sticker/nota con el mouse — sin esto, arrastrar el
+  // dedito de rotar/agrandar seleccionaba el texto de alrededor.
+  useEffect(() => {
+    const bloquear = modoInteraccion === 'girando' || modoInteraccion === 'escalando';
+    document.body.style.userSelect = bloquear ? 'none' : '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (document.body.style as any).webkitUserSelect = bloquear ? 'none' : '';
+    return () => {
+      document.body.style.userSelect = '';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (document.body.style as any).webkitUserSelect = '';
+    };
+  }, [modoInteraccion]);
+
   const gestoPendiente = useRef<{ tipo: 'sticker' | 'nota'; id: string; startX: number; startY: number } | null>(null);
   const arrastrando = useRef<{ tipo: 'sticker' | 'nota'; id: string } | null>(null);
   const girando = useRef<{ tipo: 'sticker' | 'nota'; id: string; centroX: number; centroY: number } | null>(null);
 
-  // Control de inercia y física del balanceo
   const [anguloBalanceo, setAnguloBalanceo] = useState(0);
   const [pivoteRelativo, setPivoteRelativo] = useState<{ xPct: number; yPct: number }>({ xPct: 50, yPct: 50 });
   const posAnterior = useRef<{ x: number; y: number; tiempo: number } | null>(null);
@@ -173,15 +172,26 @@ export default function DecorationLayer({
     escalaInicial: number; rotacionInicial: number;
   } | null>(null);
 
+  // Recuerda para qué calendario se cargó por última vez — sirve para
+  // detectar un cambio de calendario y limpiar de inmediato, ANTES de
+  // esperar la consulta nueva. Esto es lo que arregla el "sticker
+  // duplicado temporal": sin esto, mientras la consulta nueva estaba en
+  // curso, se seguían viendo en pantalla los stickers del calendario
+  // anterior (el de tu pareja) por un instante.
+  const ownerAnteriorRef = useRef<string | null>(null);
+
   const diasISO = dias.map((d) => format(d, 'yyyy-MM-dd'));
 
   const cargar = useCallback(async () => {
+    if (ownerAnteriorRef.current !== calendarioOwnerId) {
+      setPlacements([]);
+      setNotas([]);
+      setImgsCargados(new Set());
+      ownerAnteriorRef.current = calendarioOwnerId;
+    }
+
     const mesActualStr = format(mesActual, 'yyyy-MM');
 
-    // Migración silenciosa: decoraciones del sistema viejo (target_type
-    // 'mes') se convierten UNA VEZ a cuadrantes, reutilizando la misma
-    // función atómica que usamos para mover algo a un día nuevo — así no
-    // hay dos caminos de código distintos que puedan desincronizarse.
     const todosPlacements = await obtenerPlacementsLocal(calendarioOwnerId);
     const legacyPlacements = todosPlacements.filter((p) => p.target_type === 'mes' && p.target_mes === mesActualStr);
     for (const legacy of legacyPlacements) {
@@ -211,7 +221,7 @@ export default function DecorationLayer({
   }, [calendarioOwnerId, diasISO.join(','), format(mesActual, 'yyyy-MM')]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga decoraciones al montar, cambiar de mes, o tras un sync
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga decoraciones al montar, cambiar de mes/calendario, o tras un sync
     cargar();
   }, [cargar, refreshTick]);
 
@@ -231,6 +241,15 @@ export default function DecorationLayer({
 
   function assetDe(placement: StickerPlacementLocal) {
     return stickerAssets.find((a) => a.id === placement.sticker_asset_id);
+  }
+
+  function marcarCargado(id: string) {
+    setImgsCargados((prev) => {
+      if (prev.has(id)) return prev;
+      const nuevo = new Set(prev);
+      nuevo.add(id);
+      return nuevo;
+    });
   }
 
   function posDesdeAbs(clientX: number, clientY: number) {
@@ -262,7 +281,6 @@ export default function DecorationLayer({
     if (decoDragRef) decoDragRef.current = true;
     e.stopPropagation();
 
-    // Calcula dónde se hizo clic dentro del elemento (en porcentaje 0% - 100%)
     const rect = e.currentTarget.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       const xPct = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
@@ -294,20 +312,16 @@ export default function DecorationLayer({
     setModoInteraccion('escalando');
   }
 
-  // Bucle de física ejecutado a 60/120fps nativos para soltar con inercia de péndulo
   const iniciarAnimacionFisica = useCallback(() => {
     if (animFrameId.current !== null) return;
 
     const loopFisica = () => {
-      // Fuerza del resorte que empuja hacia 0°
       const fuerzaResorte = -RIGIDEZ_PENDULO * anguloActualRef.current;
-      // Aplicar aceleración y fricción
       velocidadAngular.current = (velocidadAngular.current + fuerzaResorte) * AMORTIGUACION_PENDULO;
       anguloActualRef.current += velocidadAngular.current;
 
       setAnguloBalanceo(anguloActualRef.current);
 
-      // Si aún se está moviendo con fuerza o está inclinado, continuar el loop
       if (Math.abs(velocidadAngular.current) > 0.01 || Math.abs(anguloActualRef.current) > 0.01) {
         animFrameId.current = requestAnimationFrame(loopFisica);
       } else {
@@ -351,15 +365,13 @@ export default function DecorationLayer({
     }
     if (!arrastrando.current) return;
 
-    // Cálculo de velocidad del cursor/dedo para la inclinación opuesta (efecto péndulo)
     // eslint-disable-next-line react-hooks/purity
     const ahora = performance.now();
     if (posAnterior.current) {
       const dt = Math.max(1, ahora - posAnterior.current.tiempo);
       const dx = clientX - posAnterior.current.x;
-      const velX = dx / dt; // velocidad en px/ms
+      const velX = dx / dt;
 
-      // Al mover a la derecha (+dx), la pieza se inclina hacia la derecha (+ángulo)
       const impulso = velX * SENSIBILIDAD_PENDULO * 15;
       velocidadAngular.current += impulso;
       iniciarAnimacionFisica();
@@ -456,9 +468,6 @@ export default function DecorationLayer({
       if (!destino) return;
 
       playSound('pegar');
-      // Se reutiliza la MISMA función atómica que la migración — un solo
-      // camino de código para "algo cambió de día", sin lógica duplicada
-      // que pueda desincronizarse entre sí.
       if (tipo === 'sticker') {
         await migrarPlacementADia(id, destino.fechaISO, destino.posXCelda, destino.posYCelda);
         setPlacements((prev) => prev.map((p) => (p.id === id ? { ...p, target_dia: destino.fechaISO, pos_x: destino.posXCelda, pos_y: destino.posYCelda } : p)));
@@ -485,10 +494,6 @@ export default function DecorationLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placements, notas, fantasma, sobreBasurero, dragVisual]);
 
-  // Gestos de 2 dedos — escuchados a nivel de VENTANA (no del sticker),
-  // porque cuando pellizcas, el segundo dedo casi nunca cae exactamente
-  // sobre el elemento pequeño; solo se activa si un dedo YA estaba
-  // tocando un sticker/nota (gestoPendiente/arrastrando).
   useEffect(() => {
     function midpoint(t1: Touch, t2: Touch) {
       return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
@@ -532,10 +537,6 @@ export default function DecorationLayer({
       const nuevoAngulo = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
       const nuevaRotacion = rotacionInicial + ((nuevoAngulo - anguloInicial) * 180) / Math.PI;
 
-      // Punto clave del fix: el sticker/nota sigue el PUNTO MEDIO entre
-      // los dos dedos en cada frame — antes solo se actualizaba
-      // escala/rotación y la posición quedaba "congelada" en el sitio
-      // donde empezó el pellizco.
       const mid = midpoint(t1, t2);
       const { x, y } = posDesdeAbs(mid.x, mid.y);
       setDragVisual({ id, xPct: x, yPct: y });
@@ -639,6 +640,7 @@ export default function DecorationLayer({
             : posicionAbsoluta(dias, p.target_dia, p.pos_x, p.pos_y);
           if (!abs) return null;
           const anguloTotal = arrastrandoEste ? p.rotacion + anguloBalanceo : p.rotacion;
+          const cargado = imgsCargados.has(p.id);
 
           return (
             <div
@@ -648,7 +650,7 @@ export default function DecorationLayer({
             >
               <div
                 data-deco-item
-                className="pointer-events-auto relative animate-[stickerPop_0.25s_ease-out]"
+                className={`pointer-events-auto relative ${cargado ? 'animate-[stickerPop_0.25s_ease-out]' : ''}`}
                 style={{
                   transform: `translate(-50%, -50%) rotate(${anguloTotal}deg) scale(${arrastrandoEste || seleccionado ? p.escala * 1.1 : p.escala})`,
                   transformOrigin: arrastrandoEste ? `${pivoteRelativo.xPct}% ${pivoteRelativo.yPct}%` : 'center center',
@@ -658,18 +660,27 @@ export default function DecorationLayer({
                 onPointerDown={(e) => onPointerDownItem('sticker', p.id, e)}
                 onClick={(e) => e.stopPropagation()}
               >
+                {!cargado && (
+                  <div
+                    className="flex items-center justify-center"
+                    style={{ width: anchoSticker, height: anchoSticker }}
+                  >
+                    <Loader2 size={Math.max(14, anchoSticker * 0.4)} className="animate-spin text-[var(--color-text-muted)]" />
+                  </div>
+                )}
                 <img
                   src={asset.url}
                   alt={asset.nombre}
-                  style={{ width: anchoSticker }}
+                  onLoad={() => marcarCargado(p.id)}
+                  style={{ width: anchoSticker, display: cargado ? 'block' : 'none' }}
                   className="select-none drop-shadow-md"
                   draggable={false}
                 />
-                {editable && seleccionado && !arrastrandoEste && (
+                {editable && seleccionado && !arrastrandoEste && cargado && (
                   <>
                     <div
                       onPointerDown={(e) => { e.stopPropagation(); iniciarEscala(p.id, e.clientX, e.clientY); }}
-                      className="absolute -bottom-1.5 -right-1.5 hidden h-6 w-6 cursor-nwse-resize items-center justify-center rounded-full border-2 border-[var(--color-bg-elevated)] bg-[var(--color-primary)] text-[var(--color-text-inverse)] shadow-[var(--sombra-panel-suave)] transition-transform hover:scale-110 sm:flex"
+                      className="absolute -bottom-1.5 -right-1.5 hidden h-6 w-6 cursor-nwse-resize select-none items-center justify-center rounded-full border-2 border-[var(--color-bg-elevated)] bg-[var(--color-primary)] text-[var(--color-text-inverse)] shadow-[var(--sombra-panel-suave)] transition-transform hover:scale-110 sm:flex"
                       style={{ transform: `scale(${1 / (p.escala * 1.1)})` }}
                       title="Arrastra para agrandar o achicar"
                     >
@@ -677,7 +688,7 @@ export default function DecorationLayer({
                     </div>
                     <div
                       onPointerDown={(e) => { e.stopPropagation(); iniciarGiro('sticker', p.id); }}
-                      className="absolute -top-1.5 -left-1.5 hidden h-6 w-6 cursor-grab items-center justify-center rounded-full border-2 border-[var(--color-bg-elevated)] bg-[var(--color-wood)] text-[var(--color-text-inverse)] shadow-[var(--sombra-panel-suave)] transition-transform hover:scale-110 active:cursor-grabbing sm:flex"
+                      className="absolute -top-1.5 -left-1.5 hidden h-6 w-6 cursor-grab select-none items-center justify-center rounded-full border-2 border-[var(--color-bg-elevated)] bg-[var(--color-wood)] text-[var(--color-text-inverse)] shadow-[var(--sombra-panel-suave)] transition-transform hover:scale-110 active:cursor-grabbing sm:flex"
                       style={{ transform: `scale(${1 / (p.escala * 1.1)})` }}
                       title="Arrastra para girar"
                     >

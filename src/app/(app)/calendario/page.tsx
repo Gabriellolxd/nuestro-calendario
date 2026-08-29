@@ -39,7 +39,6 @@ import StickerLibraryModal from '@/components/StickerLibraryModal';
 import { obtenerStickersDisponibles, limpiarStickersPredefinidosLocales, colocarStickerLocal, subirStickersPendientes, descargarStickersDesdeNube } from '@/lib/stickersLocal';
 import type { StickerVisual } from '@/lib/stickersLocal';
 import { crearNotaLocal, subirNotasPendientes, descargarNotasDesdeNube } from '@/lib/notesLocal';
-import type { StickerAssetLocal } from '@/lib/db';
 import StickerBook from '@/components/StickerBook';
 import NotesStack from '@/components/NotesStack';
 import MusicButton from '@/components/MusicButton';
@@ -86,7 +85,6 @@ export default function CalendarioPage() {
   const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
   const [arrastreTray, setArrastreTray] = useState<{ assetId: string; x: number; y: number } | null>(null);
 
-  const [modoDecorar, setModoDecorar] = useState(false);
   const [mostrarLibreriaStickers, setMostrarLibreriaStickers] = useState(false);
   const [stickerAssets, setStickerAssets] = useState<StickerVisual[]>([]);
   const [decoTick, setDecoTick] = useState(0);
@@ -433,7 +431,7 @@ export default function CalendarioPage() {
                 diaResaltado={diaSeleccionadoUsuario}
                 ocurrencias={ocurrencias}
                 fasePorDia={obtenerFasePorFecha}
-                onCrear={modoDecorar ? () => {} : abrirModalParaCrear}
+                onCrear={abrirModalParaCrear}
                 onEditar={abrirModalParaEditar}
                 onDetalle={abrirDetalle}
               />
