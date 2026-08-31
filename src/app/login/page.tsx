@@ -1,10 +1,9 @@
 // src/app/login/page.tsx
-
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, Coffee } from 'lucide-react';
+import { Mail, Coffee, WifiOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { ensureDeviceRegistered } from '@/lib/device';
 import { setPreferenciaRecordarme } from '@/lib/supabase';
@@ -16,8 +15,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
-  const [recordarme, setRecordarme] = useState(true); // marcada por defecto
+  const [recordarme, setRecordarme] = useState(true);
   const router = useRouter();
+
+  async function intentarConReintentos<T>(fn: () => Promise<T>): Promise<T> {
+    let ultimoError: unknown = null;
+    for (let intento = 0; intento < 3; intento++) {
+      try {
+        return await fn();
+      } catch (err) {
+        ultimoError = err;
+        if (intento < 2) await new Promise((r) => setTimeout(r, 700 * (intento + 1)));
+      }
+    }
+    throw ultimoError;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,28 +38,34 @@ export default function LoginPage() {
     setPreferenciaRecordarme(recordarme);
 
     try {
-        const { data, error: authError } =
-            modo === 'login'
-            ? await supabase.auth.signInWithPassword({ email, password })
-            : await supabase.auth.signUp({ email, password });
+      const { data, error: authError } = await intentarConReintentos(() =>
+        modo === 'login'
+          ? supabase.auth.signInWithPassword({ email, password })
+          : supabase.auth.signUp({ email, password })
+      );
 
-        if (authError) throw authError;
+      if (authError) throw authError;
 
-        // Si no hay sesión activa, es porque falta confirmar el correo.
-        // No intentamos nada más hasta que sí haya sesión real.
-        if (!data.session) {
-            setError('Cuenta creada. Revisa tu correo y confirma antes de iniciar sesión.');
-            setCargando(false);
-            return;
-        }
-
-        await ensureDeviceRegistered(data.session.user.id);
-        router.push('/calendario');
-        } catch (err) {
-        const mensaje = err instanceof Error ? err.message : 'Ocurrió un error.';
-        setError(mensaje);
-        } finally {
+      if (!data.session) {
+        setError('Cuenta creada. Revisa tu correo y confirma antes de iniciar sesión.');
         setCargando(false);
+        return;
+      }
+
+      await ensureDeviceRegistered(data.session.user.id);
+      router.push('/calendario');
+    } catch (err) {
+      const esErrorDeRed =
+        err instanceof TypeError && err.message.toLowerCase().includes('fetch');
+      setError(
+        esErrorDeRed
+          ? 'No se pudo conectar al servidor. Revisa tu conexión e intenta de nuevo.'
+          : err instanceof Error
+          ? err.message
+          : 'Ocurrió un error.'
+      );
+    } finally {
+      setCargando(false);
     }
   }
 
@@ -91,7 +109,8 @@ export default function LoginPage() {
           </label>
 
           {error && (
-            <p className="rounded-lg border-2 border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+            <p className="flex items-start gap-2 rounded-lg border-2 border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+              {error.includes('conectar') && <WifiOff size={15} className="mt-0.5 flex-shrink-0" />}
               {error}
             </p>
           )}

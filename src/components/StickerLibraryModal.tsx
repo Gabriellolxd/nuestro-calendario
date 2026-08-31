@@ -4,13 +4,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { X, Upload, Trash2 } from 'lucide-react';
 import {
-  obtenerStickersLocal,
+  obtenerStickersDisponibles,
   crearStickerLocal,
   eliminarStickerLocal,
-  urlParaSticker,
   subirStickersPendientes,
 } from '@/lib/stickersLocal';
-import type { StickerAssetLocal } from '@/lib/db';
+import type { StickerVisual } from '@/lib/stickersLocal';
 
 type Props = {
   userId: string;
@@ -20,14 +19,14 @@ type Props = {
 };
 
 export default function StickerLibraryModal({ userId, idsCalendariosVisibles, onClose, onElegirParaColocar }: Props) {
-  const [stickers, setStickers] = useState<StickerAssetLocal[]>([]);
+  const [stickers, setStickers] = useState<StickerVisual[]>([]);
   const [cargando, setCargando] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function cargar() {
-    const locales = await obtenerStickersLocal(idsCalendariosVisibles);
-    setStickers(locales);
+    const disponibles = await obtenerStickersDisponibles(idsCalendariosVisibles);
+    setStickers(disponibles);
     setCargando(false);
   }
 
@@ -73,8 +72,8 @@ export default function StickerLibraryModal({ userId, idsCalendariosVisibles, on
     }
   }
 
-  async function handleEliminar(sticker: StickerAssetLocal) {
-    if (sticker.owner_user_id !== userId || sticker.es_predefinido) return;
+  async function handleEliminar(sticker: StickerVisual) {
+    if (sticker.esPredefinido || sticker.ownerUserId !== userId) return;
     await eliminarStickerLocal(sticker.id);
     await cargar();
     subirStickersPendientes().catch((err) => console.error('Error sincronizando:', err));
@@ -108,9 +107,9 @@ export default function StickerLibraryModal({ userId, idsCalendariosVisibles, on
                   onClick={() => onElegirParaColocar?.(s.id)}
                   className="w-full rounded-lg border-2 border-transparent p-1 hover:border-[var(--color-border)] hover:bg-[var(--color-surface)]"
                 >
-                  <img src={urlParaSticker(s)} alt={s.nombre} className="aspect-square w-full object-contain" />
+                  <img src={s.url} alt={s.nombre} className="aspect-square w-full object-contain" />
                 </button>
-                {s.owner_user_id === userId && !s.es_predefinido && (
+                {!s.esPredefinido && s.ownerUserId === userId && (
                   <button
                     onClick={() => handleEliminar(s)}
                     className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-danger)] text-[10px] text-white"
@@ -118,11 +117,6 @@ export default function StickerLibraryModal({ userId, idsCalendariosVisibles, on
                   >
                     <Trash2 size={10} />
                   </button>
-                )}
-                {s.synced === 0 && (
-                  <span className="absolute bottom-0 left-0 rounded bg-[var(--color-gold)] px-1 text-[8px] text-[var(--color-wood-dark)]">
-                    pendiente
-                  </span>
                 )}
               </div>
             ))}

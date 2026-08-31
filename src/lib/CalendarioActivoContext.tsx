@@ -62,8 +62,35 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
   useEffect(() => {
     async function iniciar() {
       try {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
+        let data: Awaited<ReturnType<typeof supabase.auth.getSession>>['data'] | null = null;
+        let ultimoError: unknown = null;
+
+        for (let intento = 0; intento < 3; intento++) {
+          try {
+            const resultado = await supabase.auth.getSession();
+            data = resultado.data;
+            ultimoError = null;
+            break;
+          } catch (err) {
+            ultimoError = err;
+            if (intento < 2) await new Promise((r) => setTimeout(r, 800 * (intento + 1)));
+          }
+        }
+
+        if (ultimoError) {
+          const uidGuardado = localStorage.getItem(LAST_USER_KEY);
+          if (uidGuardado) {
+            setUserId(uidGuardado);
+            setSinConexionInicial(true);
+            await cargarOpciones(uidGuardado);
+            setCargando(false);
+            return;
+          }
+          router.push('/login');
+          return;
+        }
+
+        if (data?.session) {
           const uid = data.session.user.id;
           try { localStorage.setItem(LAST_USER_KEY, uid); } catch {}
           try {
@@ -78,9 +105,6 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
           return;
         }
 
-        // No hay sesión según Supabase. Si estamos offline y ya hubo una
-        // sesión antes en este dispositivo, entra igual con los datos
-        // locales — pedir login no serviría de nada sin conexión.
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
           const uidGuardado = localStorage.getItem(LAST_USER_KEY);
           if (uidGuardado) {
@@ -96,7 +120,7 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
       } catch (err) {
         console.error('Error verificando sesión:', err);
         const uidGuardado = localStorage.getItem(LAST_USER_KEY);
-        if (uidGuardado && typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (uidGuardado) {
           setUserId(uidGuardado);
           setSinConexionInicial(true);
           await cargarOpciones(uidGuardado);
