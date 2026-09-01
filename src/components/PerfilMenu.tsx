@@ -11,12 +11,15 @@ import ThemeSwitcher from './ThemeSwitcher';
 import NotificacionesCalendariosModal from './NotificacionesCalendariosModal';
 import VincularModal from './VincularModal';
 import { playSound } from '@/lib/soundManager';
+import { Settings } from 'lucide-react';
+import OpcionesExtraModal from './OpcionesExtraModal';
 
 export default function PerfilMenu() {
   const [abierto, setAbierto] = useState(false);
   const [mostrarNotifModal, setMostrarNotifModal] = useState(false);
   const contenedorRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const [mostrarOpcionesExtra, setMostrarOpcionesExtra] = useState(false);
 
   useEffect(() => {
     function manejarClickFuera(e: MouseEvent) {
@@ -80,6 +83,14 @@ export default function PerfilMenu() {
             Notificaciones
           </button>
 
+          <button
+            onClick={() => { setMostrarOpcionesExtra(true); setAbierto(false); }}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-[var(--color-text)] transition-colors hover:bg-[var(--color-surface)]"
+          >
+            <Settings size={16} className="text-[var(--color-primary)]" />
+            Opciones extra
+          </button>
+
           <div className="my-1 border-t border-[var(--color-border)]" />
           <ThemeSwitcher />
           <div className="my-1 border-t border-[var(--color-border)]" />
@@ -94,6 +105,7 @@ export default function PerfilMenu() {
         </div>
       )}
       {mostrarNotifModal && <NotificacionesCalendariosModal onClose={() => setMostrarNotifModal(false)} />}
+      {mostrarOpcionesExtra && <OpcionesExtraModal onClose={() => setMostrarOpcionesExtra(false)} />}
     </div>
   );
 }

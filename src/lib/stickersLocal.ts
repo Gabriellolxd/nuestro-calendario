@@ -276,3 +276,14 @@ export async function descargarStickersDesdeNube(userIds: string[], calendarioOw
     console.error('Error descargando stickers:', err);
   }
 }
+
+
+// Borra TODOS los stickers colocados en un calendario (no la librería,
+// solo lo que está pegado en los días).
+export async function limpiarTodosLosStickersDelCalendario(calendarioOwnerId: string) {
+  const todos = await obtenerPlacementsLocal(calendarioOwnerId);
+  for (const p of todos) {
+    await quitarStickerLocal(p.id);
+  }
+  await subirStickersPendientes();
+}

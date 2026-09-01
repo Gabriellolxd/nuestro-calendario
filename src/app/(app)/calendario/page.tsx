@@ -70,6 +70,8 @@ export default function CalendarioPage() {
   const { userId, calendarioActivo, cargando: cargandoContexto, opciones, primerSyncCompleto } = useCalendarioActivo();  const ownerId = calendarioActivo?.ownerId ?? null;
   const esEspectador = calendarioActivo?.rol === 'espectador';
 
+    const runTokenStickersRef = useRef(0);
+
   const [vista, setVista] = useState<Vista>('mes');
   const [fechaAncla, setFechaAncla] = useState(ahoraEcuador());
   const [diaSeleccionadoUsuario, setDiaSeleccionadoUsuario] = useState<Date | null>(null);
@@ -170,21 +172,23 @@ export default function CalendarioPage() {
     if (!ownerId || !userId) return;
     const ownerIdSeguro = ownerId;
     const ids = [userId, ownerIdSeguro].filter((v, i, arr) => arr.indexOf(v) === i);
-    let cancelado = false;
+
+    // Token que crece con cada corrida nueva: si dos corridas quedan
+    // superpuestas (cambio rápido de calendario + sync automático de
+    // fondo), solo la ÚLTIMA que se disparó puede escribir el estado
+    // final, sin importar cuál de las dos termine primero.
+    runTokenStickersRef.current += 1;
+    const miToken = runTokenStickersRef.current;
 
     async function sincronizarStickersYNotas() {
       await limpiarStickersPredefinidosLocales();
-      // Espera a que la descarga TERMINE antes de leer — antes se leía
-      // de inmediato, sin esperar, por eso nunca veías a tiempo los
-      // stickers personalizados de tu pareja.
       await descargarStickersDesdeNube(ids, ownerIdSeguro);
       await descargarNotasDesdeNube(ownerIdSeguro);
-      if (cancelado) return;
+      if (runTokenStickersRef.current !== miToken) return; // ya hay una corrida más nueva
       setStickerAssets(await obtenerStickersDisponibles(ids));
     }
 
     sincronizarStickersYNotas();
-    return () => { cancelado = true; };
   }, [userId, ownerId, syncTick]);
 
   useEffect(() => {

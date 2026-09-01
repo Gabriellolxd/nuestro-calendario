@@ -7,6 +7,8 @@ import { BookOpen, Upload, X, Trash2, AlertTriangle } from 'lucide-react';
 import type { StickerVisual } from '@/lib/stickersLocal';
 import { eliminarStickerLocal, subirStickersPendientes } from '@/lib/stickersLocal';
 import { playSound } from '@/lib/soundManager';
+import { STICKERS_PREDEFINIDOS } from '@/lib/stickersPredefinidos';
+import { eliminacionAjenaEstaActiva } from '@/lib/adminMode';
 
 const POR_LADO = 6;
 
@@ -60,7 +62,9 @@ export default function StickerBook({
   }
 
   function handleClickStickerEnModoEliminar(sticker: StickerVisual) {
-    if (sticker.esPredefinido || sticker.ownerUserId !== userId) {
+    const esPredefinidoDelManifiesto = sticker.esPredefinido; // los del manifiesto nunca se pueden borrar, sean tuyos o no
+    const puedeSaltarseRestriccionDeDueno = eliminacionAjenaEstaActiva();
+    if (esPredefinidoDelManifiesto || (!puedeSaltarseRestriccionDeDueno && sticker.ownerUserId !== userId)) {
       setAvisoNoPermitido(true);
       setTimeout(() => setAvisoNoPermitido(false), 2200);
       return;

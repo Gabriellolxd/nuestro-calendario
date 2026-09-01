@@ -132,3 +132,11 @@ export async function descargarNotasDesdeNube(calendarioOwnerId: string) {
     console.error('Error descargando notas:', err);
   }
 }
+
+export async function limpiarTodasLasNotasDelCalendario(calendarioOwnerId: string) {
+  const todas = await obtenerTodasLasNotasLocal(calendarioOwnerId);
+  for (const n of todas) {
+    await eliminarNotaLocal(n.id);
+  }
+  await subirNotasPendientes();
+}
