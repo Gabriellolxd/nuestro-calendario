@@ -54,23 +54,17 @@ export async function eliminarNotaLocal(id: string) {
   });
 }
 
-// Todas las notas del calendario, sin filtrar (usado por la migración y
-// por consultas multi-día).
 export async function obtenerTodasLasNotasLocal(calendarioOwnerId: string): Promise<StickyNoteLocal[]> {
   const todas = await db.sticky_notes.where('calendario_owner_id').equals(calendarioOwnerId).toArray();
   return todas.filter((n) => n.deleted_at === null);
 }
 
-// Notas ancladas a cualquiera de los días visibles en la grilla actual
-// (sistema de cuadrantes: cada nota vive en un día específico).
 export async function obtenerNotasParaDias(calendarioOwnerId: string, diasISO: string[]): Promise<StickyNoteLocal[]> {
   const todas = await obtenerTodasLasNotasLocal(calendarioOwnerId);
   const set = new Set(diasISO);
   return todas.filter((n) => n.target_type === 'dia' && n.target_dia && set.has(n.target_dia));
 }
 
-// Migración: convierte una nota vieja (target_type 'mes', posición libre
-// sobre todo el mes) a una nota anclada a un día específico (cuadrante).
 export async function migrarNotaADia(id: string, targetDia: string, posX: number, posY: number) {
   await db.sticky_notes.update(id, {
     target_type: 'dia',
@@ -120,11 +114,20 @@ export async function descargarNotasDesdeNube(calendarioOwnerId: string) {
   if (estaOffline()) return;
   try {
     const { data } = await supabase.from('sticky_notes').select('*').eq('calendario_owner_id', calendarioOwnerId);
-    if (!data) return;
-    const idsNube = data.map((n) => n.id);
-    const locales = await db.sticky_notes.where('id').anyOf(idsNube).toArray();
+    const remotas = data ?? [];
+    const idsRemotos = new Set(remotas.map((n) => n.id));
+
+    const locales = await db.sticky_notes.where('calendario_owner_id').equals(calendarioOwnerId).toArray();
     const protegidos = new Set(locales.filter((n) => n.synced === 0).map((n) => n.id));
-    const paraGuardar = data
+
+    // Reconciliación real: mismo motivo que en stickers — una nota
+    // borrada desde otro dispositivo debe desaparecer también aquí.
+    const huerfanas = locales.filter((n) => !protegidos.has(n.id) && !idsRemotos.has(n.id));
+    if (huerfanas.length > 0) {
+      await db.sticky_notes.bulkDelete(huerfanas.map((n) => n.id));
+    }
+
+    const paraGuardar = remotas
       .filter((n) => !protegidos.has(n.id))
       .map((n) => ({ ...n, synced: 1, client_updated_at: new Date().toISOString(), deleted_at: null }));
     if (paraGuardar.length > 0) await db.sticky_notes.bulkPut(paraGuardar);

@@ -19,10 +19,6 @@ export function urlParaSticker(asset: StickerAssetLocal): string {
   return '';
 }
 
-// Un sticker "para mostrar": puede venir del manifiesto estático
-// (predefinido, sin fila en la base de datos, igual para todos) o de la
-// tabla real (subido por alguien). Unificado para que el resto de la app
-// no necesite saber la diferencia al momento de dibujarlo.
 export type StickerVisual = {
   id: string;
   nombre: string;
@@ -31,9 +27,6 @@ export type StickerVisual = {
   ownerUserId: string | null;
 };
 
-// Purga filas locales viejas de predefinidos (del sistema anterior, ya no
-// se usan) — self-healing: se llama al abrir el calendario, sin necesidad
-// de limpiar Dexie a mano en cada dispositivo.
 export async function limpiarStickersPredefinidosLocales() {
   const todos = await db.sticker_assets.toArray();
   const viejos = todos.filter((s) => s.es_predefinido);
@@ -173,7 +166,7 @@ export async function subirStickersPendientes() {
 
   const assetsPendientes = await db.sticker_assets.where('synced').equals(0).toArray();
   for (const asset of assetsPendientes) {
-    if (asset.es_predefinido) continue; // nunca deberían existir, pero por seguridad no se suben
+    if (asset.es_predefinido) continue;
     try {
       if (asset.deleted_at) {
         if (asset.storage_path) {
@@ -244,42 +237,66 @@ export async function descargarStickersDesdeNube(userIds: string[], calendarioOw
   if (estaOffline()) return;
 
   try {
+    // ---------- ASSETS (librería) ----------
     const { data: assetsNube } = await supabase
       .from('sticker_assets')
       .select('*')
       .in('owner_user_id', userIds)
       .eq('es_predefinido', false);
-    if (assetsNube) {
-      const idsNube = assetsNube.map((a) => a.id);
-      const locales = await db.sticker_assets.where('id').anyOf(idsNube).toArray();
-      const protegidos = new Set(locales.filter((a) => a.synced === 0).map((a) => a.id));
-      const paraGuardar = assetsNube
-        .filter((a) => !protegidos.has(a.id))
-        .map((a) => ({ ...a, blob: null, synced: 1, client_updated_at: new Date().toISOString(), deleted_at: null }));
-      if (paraGuardar.length > 0) await db.sticker_assets.bulkPut(paraGuardar);
+
+    const assetsRemotos = assetsNube ?? [];
+    const idsRemotos = new Set(assetsRemotos.map((a) => a.id));
+
+    const localesDeEstosUsuarios = await db.sticker_assets.where('owner_user_id').anyOf(userIds).toArray();
+    const protegidos = new Set(localesDeEstosUsuarios.filter((a) => a.synced === 0).map((a) => a.id));
+
+    // Reconciliación real: un sticker local ya sincronizado que YA NO
+    // existe en el servidor (borrado desde otro dispositivo) se elimina
+    // aquí también — antes esto nunca pasaba, porque este pull solo
+    // agregaba/actualizaba filas y jamás quitaba las desaparecidas.
+    const huerfanos = localesDeEstosUsuarios.filter(
+      (a) => !a.es_predefinido && !protegidos.has(a.id) && !idsRemotos.has(a.id)
+    );
+    if (huerfanos.length > 0) {
+      await db.sticker_assets.bulkDelete(huerfanos.map((a) => a.id));
     }
 
+    const paraGuardar = assetsRemotos
+      .filter((a) => !protegidos.has(a.id))
+      .map((a) => ({ ...a, blob: null, synced: 1, client_updated_at: new Date().toISOString(), deleted_at: null }));
+    if (paraGuardar.length > 0) await db.sticker_assets.bulkPut(paraGuardar);
+
+    // ---------- PLACEMENTS (stickers pegados en este calendario) ----------
     const { data: placementsNube } = await supabase
       .from('sticker_placements')
       .select('*')
       .eq('calendario_owner_id', calendarioOwnerId);
-    if (placementsNube) {
-      const idsNube = placementsNube.map((p) => p.id);
-      const locales = await db.sticker_placements.where('id').anyOf(idsNube).toArray();
-      const protegidos = new Set(locales.filter((p) => p.synced === 0).map((p) => p.id));
-      const paraGuardar = placementsNube
-        .filter((p) => !protegidos.has(p.id))
-        .map((p) => ({ ...p, synced: 1, client_updated_at: new Date().toISOString(), deleted_at: null }));
-      if (paraGuardar.length > 0) await db.sticker_placements.bulkPut(paraGuardar);
+
+    const placementsRemotos = placementsNube ?? [];
+    const idsPlacementsRemotos = new Set(placementsRemotos.map((p) => p.id));
+
+    const placementsLocales = await db.sticker_placements
+      .where('calendario_owner_id')
+      .equals(calendarioOwnerId)
+      .toArray();
+    const protegidosPlacements = new Set(placementsLocales.filter((p) => p.synced === 0).map((p) => p.id));
+
+    const huerfanosPlacements = placementsLocales.filter(
+      (p) => !protegidosPlacements.has(p.id) && !idsPlacementsRemotos.has(p.id)
+    );
+    if (huerfanosPlacements.length > 0) {
+      await db.sticker_placements.bulkDelete(huerfanosPlacements.map((p) => p.id));
     }
+
+    const placementsParaGuardar = placementsRemotos
+      .filter((p) => !protegidosPlacements.has(p.id))
+      .map((p) => ({ ...p, synced: 1, client_updated_at: new Date().toISOString(), deleted_at: null }));
+    if (placementsParaGuardar.length > 0) await db.sticker_placements.bulkPut(placementsParaGuardar);
   } catch (err) {
     console.error('Error descargando stickers:', err);
   }
 }
 
-
-// Borra TODOS los stickers colocados en un calendario (no la librería,
-// solo lo que está pegado en los días).
 export async function limpiarTodosLosStickersDelCalendario(calendarioOwnerId: string) {
   const todos = await obtenerPlacementsLocal(calendarioOwnerId);
   for (const p of todos) {

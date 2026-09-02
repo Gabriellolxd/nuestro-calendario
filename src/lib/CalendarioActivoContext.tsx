@@ -8,6 +8,8 @@ import { ensureDeviceRegistered } from './device';
 import { obtenerCalendariosDisponibles, type CalendarioDisponible } from './vinculos';
 import { subirCambiosPendientes } from './sync';
 import { descargarDesdeNube } from './localData';
+import { subirStickersPendientes } from './stickersLocal';
+import { subirNotasPendientes } from './notesLocal';
 
 const STORAGE_KEY = 'nc_calendario_activo_owner_id';
 const INTERVALO_SYNC_MS = 45_000;
@@ -157,6 +159,12 @@ export function CalendarioActivoProvider({ children }: { children: React.ReactNo
     setEstadoSync('syncing');
     try {
       await subirCambiosPendientes();
+      // Reintenta subidas de stickers/notas que hayan quedado pendientes
+      // (synced: 0) por cualquier motivo — antes solo se intentaba una
+      // vez, justo al crearlos, y si fallaba quedaba atascado para
+      // siempre sin que nada lo reintentara.
+      await subirStickersPendientes();
+      await subirNotasPendientes();
       await descargarDesdeNube(calendarioActivo.ownerId);
       setUltimaSync(new Date());
       setEstadoSync('idle');
