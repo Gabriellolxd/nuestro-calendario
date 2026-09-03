@@ -79,9 +79,13 @@ export async function eliminarStickerLocal(id: string) {
   });
 }
 
+// Ya no filtramos por dueño: lo que hay en Dexie es exactamente lo que
+// las consultas de red (abajo) decidieron que era legítimo traer — no
+// hace falta volver a filtrar aquí, y filtrar de más era justo la causa
+// del bug de "no veo los stickers de mi pareja en mi propio calendario".
 export async function obtenerStickersLocal(userIds: string[]): Promise<StickerAssetLocal[]> {
   const todos = await db.sticker_assets.toArray();
-  return todos.filter((s) => s.deleted_at === null && !s.es_predefinido && userIds.includes(s.owner_user_id));
+  return todos.filter((s) => s.deleted_at === null && !s.es_predefinido);
 }
 
 export async function colocarStickerLocal(datos: {
@@ -233,45 +237,71 @@ export async function subirStickersPendientes() {
   }
 }
 
-export async function descargarStickersDesdeNube(userIds: string[], calendarioOwnerId: string) {
+export async function descargarStickersDesdeNube(
+  userIds: string[],
+  calendarioOwnerId: string,
+  selfUserId: string
+) {
   if (estaOffline()) return;
 
   try {
-    // ---------- ASSETS (librería) ----------
-    const { data: assetsNube } = await supabase
+    // 1) Librería para elegir: tus propios stickers + los de cualquier
+    // persona vinculada (para poder pegarlos, aunque aún no estén
+    // colocados en ningún calendario).
+    const { data: assetsLibreria } = await supabase
       .from('sticker_assets')
       .select('*')
       .in('owner_user_id', userIds)
       .eq('es_predefinido', false);
 
-    const assetsRemotos = assetsNube ?? [];
-    const idsRemotos = new Set(assetsRemotos.map((a) => a.id));
+    // 2) Placements de este calendario.
+    const { data: placementsNube } = await supabase
+      .from('sticker_placements')
+      .select('*')
+      .eq('calendario_owner_id', calendarioOwnerId);
 
-    const localesDeEstosUsuarios = await db.sticker_assets.where('owner_user_id').anyOf(userIds).toArray();
-    const protegidos = new Set(localesDeEstosUsuarios.filter((a) => a.synced === 0).map((a) => a.id));
+    // 3) Assets REALMENTE usados en este calendario, sin filtrar por
+    // dueño — esto es lo que garantiza que se vea un sticker de tu
+    // pareja pegado en TU calendario, sin importar la dirección del
+    // vínculo entre ustedes.
+    const idsAssetsUsados = Array.from(
+      new Set((placementsNube ?? []).map((p) => p.sticker_asset_id))
+    ).filter((id) => !id.startsWith('predef-'));
 
-    // Reconciliación real: un sticker local ya sincronizado que YA NO
-    // existe en el servidor (borrado desde otro dispositivo) se elimina
-    // aquí también — antes esto nunca pasaba, porque este pull solo
-    // agregaba/actualizaba filas y jamás quitaba las desaparecidas.
-    const huerfanos = localesDeEstosUsuarios.filter(
-      (a) => !a.es_predefinido && !protegidos.has(a.id) && !idsRemotos.has(a.id)
-    );
-    if (huerfanos.length > 0) {
-      await db.sticker_assets.bulkDelete(huerfanos.map((a) => a.id));
+    let assetsDePlacements: StickerAssetLocal[] = [];
+    if (idsAssetsUsados.length > 0) {
+      const { data } = await supabase.from('sticker_assets').select('*').in('id', idsAssetsUsados);
+      assetsDePlacements = (data ?? []) as StickerAssetLocal[];
     }
+
+    const combinados = new Map<string, StickerAssetLocal>();
+    for (const a of assetsLibreria ?? []) combinados.set(a.id, a);
+    for (const a of assetsDePlacements) combinados.set(a.id, a);
+    const assetsRemotos = Array.from(combinados.values());
+
+    const locales = await db.sticker_assets.toArray();
+    const protegidos = new Set(locales.filter((a) => a.synced === 0).map((a) => a.id));
 
     const paraGuardar = assetsRemotos
       .filter((a) => !protegidos.has(a.id))
       .map((a) => ({ ...a, blob: null, synced: 1, client_updated_at: new Date().toISOString(), deleted_at: null }));
     if (paraGuardar.length > 0) await db.sticker_assets.bulkPut(paraGuardar);
 
-    // ---------- PLACEMENTS (stickers pegados en este calendario) ----------
-    const { data: placementsNube } = await supabase
-      .from('sticker_placements')
-      .select('*')
-      .eq('calendario_owner_id', calendarioOwnerId);
+    // Reconciliación de borrados: SOLO para tus propios assets. Nunca
+    // borramos localmente algo de otra persona por su sola ausencia en
+    // esta consulta — su ausencia puede deberse solo a que esta vez no
+    // se volvió a pedir, no a que se haya borrado de verdad. Esto era
+    // justo lo que causaba el "aparece un instante y desaparece".
+    const misLocales = locales.filter((a) => a.owner_user_id === selfUserId && !a.es_predefinido);
+    const idsLibreriaRemota = new Set((assetsLibreria ?? []).map((a) => a.id));
+    const huerfanosPropios = misLocales.filter(
+      (a) => !protegidos.has(a.id) && !idsLibreriaRemota.has(a.id)
+    );
+    if (huerfanosPropios.length > 0) {
+      await db.sticker_assets.bulkDelete(huerfanosPropios.map((a) => a.id));
+    }
 
+    // ---------- PLACEMENTS (igual que antes) ----------
     const placementsRemotos = placementsNube ?? [];
     const idsPlacementsRemotos = new Set(placementsRemotos.map((p) => p.id));
 

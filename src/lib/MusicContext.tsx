@@ -16,24 +16,24 @@ type Ctx = {
 };
 
 const MusicContext = createContext<Ctx | null>(null);
-const KEY_MUTE = 'nc_musica_silenciada';
 const KEY_VOL = 'nc_musica_volumen';
 
 export function MusicProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ordenRef = useRef<number[]>([]);
   const indiceRef = useRef(0);
-  const desbloqueadoRef = useRef(false);
-  const [silenciado, setSilenciado] = useState(false);
+  // La app SIEMPRE arranca en silencio — el usuario decide si quiere
+  // música tocando el ícono. Es la única fuente de verdad: no hay ningún
+  // otro camino de código que intente iniciar el audio por su cuenta.
+  const [silenciado, setSilenciado] = useState(true);
   const [volumen, setVolumen] = useState(0.4);
   const [pistaActual, setPistaActual] = useState<string | null>(null);
 
   useEffect(() => {
+    attachGlobalUiSounds();
     try {
-      const m = localStorage.getItem(KEY_MUTE);
       const v = localStorage.getItem(KEY_VOL);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (m !== null) setSilenciado(m === '1');
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restaura el volumen guardado al montar (localStorage no es reactivo)
       if (v !== null) setVolumen(Number(v));
     } catch {}
   }, []);
@@ -48,6 +48,8 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
     indiceRef.current = 0;
   }, []);
 
+  const reproducirSiguienteRef = useRef<() => void>(() => {});
+
   const reproducirSiguiente = useCallback(() => {
     if (PISTAS_MUSICA.length === 0) return;
     if (ordenRef.current.length === 0 || indiceRef.current >= ordenRef.current.length) barajar();
@@ -57,50 +59,43 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
 
     if (!audioRef.current) {
       audioRef.current = new Audio();
-      // eslint-disable-next-line react-hooks/immutability
-      audioRef.current.addEventListener('ended', () => reproducirSiguiente());
-      audioRef.current.addEventListener('error', () => reproducirSiguiente());
+      // Se llama a través del ref (no directamente a reproducirSiguiente)
+      // para evitar la auto-referencia dentro del propio useCallback —
+      // el ref siempre apunta a la versión más reciente de la función.
+      audioRef.current.addEventListener('ended', () => reproducirSiguienteRef.current());
+      audioRef.current.addEventListener('error', () => reproducirSiguienteRef.current());
     }
     audioRef.current.src = pista.archivo;
     audioRef.current.volume = volumen;
-    audioRef.current.play().catch(() => {});
+    audioRef.current.play().catch(() => {
+      // El navegador rechazó reproducir — reflejamos la realidad en el
+      // ícono en vez de dejarlo mintiendo.
+      setSilenciado(true);
+    });
     setPistaActual(pista.nombre);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volumen]);
 
   useEffect(() => {
-    attachGlobalUiSounds();
-
-    function iniciar() {
-      if (desbloqueadoRef.current) return;
-      desbloqueadoRef.current = true;
-      window.removeEventListener('pointerdown', iniciar);
-      window.removeEventListener('keydown', iniciar);
-      playSound('inicio');
-      if (!silenciado) setTimeout(() => reproducirSiguiente(), 900);
-    }
-    window.addEventListener('pointerdown', iniciar);
-    window.addEventListener('keydown', iniciar);
-    return () => {
-      window.removeEventListener('pointerdown', iniciar);
-      window.removeEventListener('keydown', iniciar);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    reproducirSiguienteRef.current = reproducirSiguiente;
+  }, [reproducirSiguiente]);
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volumen;
     try { localStorage.setItem(KEY_VOL, String(volumen)); } catch {}
   }, [volumen]);
 
+  // Único lugar que decide play/pause — reacciona SOLO al estado
+  // `silenciado`, así el ícono y el audio nunca pueden desincronizarse.
   useEffect(() => {
-    try { localStorage.setItem(KEY_MUTE, silenciado ? '1' : '0'); } catch {}
-    if (!audioRef.current) return;
     if (silenciado) {
-      audioRef.current.pause();
-    } else if (desbloqueadoRef.current) {
-      if (audioRef.current.src) audioRef.current.play().catch(() => {});
-      else reproducirSiguiente();
+      audioRef.current?.pause();
+      return;
+    }
+    if (!audioRef.current || !audioRef.current.src) {
+      reproducirSiguiente();
+    } else {
+      audioRef.current.play().catch(() => setSilenciado(true));
     }
   }, [silenciado, reproducirSiguiente]);
 
@@ -110,7 +105,10 @@ export function MusicProvider({ children }: { children: React.ReactNode }) {
         silenciado,
         volumen,
         pistaActual,
-        alternarSilencio: () => setSilenciado((s) => !s),
+        alternarSilencio: () => {
+          playSound('click');
+          setSilenciado((s) => !s);
+        },
         cambiarVolumen: (v) => setVolumen(Math.min(1, Math.max(0, v))),
         siguienteCancion: () => reproducirSiguiente(),
       }}

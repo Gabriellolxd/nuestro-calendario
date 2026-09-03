@@ -171,7 +171,8 @@ export default function CalendarioPage() {
   useEffect(() => {
     if (!ownerId || !userId) return;
     const ownerIdSeguro = ownerId;
-    const ids = [userId, ownerIdSeguro].filter((v, i, arr) => arr.indexOf(v) === i);
+    const userIdSeguro = userId;
+    const ids = [userIdSeguro, ownerIdSeguro].filter((v, i, arr) => arr.indexOf(v) === i);
 
     // Token que crece con cada corrida nueva: si dos corridas quedan
     // superpuestas (cambio rápido de calendario + sync automático de
@@ -182,7 +183,7 @@ export default function CalendarioPage() {
 
     async function sincronizarStickersYNotas() {
       await limpiarStickersPredefinidosLocales();
-      await descargarStickersDesdeNube(ids, ownerIdSeguro);
+      await descargarStickersDesdeNube(ids, ownerIdSeguro, userIdSeguro);
       await descargarNotasDesdeNube(ownerIdSeguro);
       if (runTokenStickersRef.current !== miToken) return; // ya hay una corrida más nueva
       setStickerAssets(await obtenerStickersDisponibles(ids));
